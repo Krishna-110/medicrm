@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "module": "nodenext",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  // Root-level tooling entry points. Deliberately a glob rather than a single filename:
+  // an allowlist of one is how server/tests/ ended up outside type coverage entirely.
+  // Anything nothing imports — a config, a script, a future e2e spec — is invisible unless
+  // a pattern matches it, because TypeScript only follows imports from listed roots.
+  // src/ is excluded because tsconfig.app.json owns it (DOM lib + jsx).
+  "include": ["*.ts"],
+  "exclude": ["node_modules", "dist", "src", "server"]
+}
