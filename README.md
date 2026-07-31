@@ -48,22 +48,18 @@ Seeded logins — password `admin123` for admins, `caller123` for callers:
 ## Testing
 
 ```bash
-npm test          # typecheck, build, then 120 backend tests
-npm run test:e2e  # 40 browser tests through the real UI
+npm test   # typecheck, build, then 120 backend tests
 ```
 
-Both build `crm_test` from scratch first — dropped, migrated and reseeded — so a failure never depends on what ran before it. Your development database is never touched.
+It builds `crm_test` from scratch first — dropped, migrated and reseeded — so a failure never depends on what ran before it. Your development database is never touched.
 
-The browser suite starts its own API and Vite on different ports (`:3002` / `:5174`), so you can leave `npm run dev` running while it executes.
-
-CI runs both on every push.
+The 120 tests cover the pure logic (IST dates, pricing, mobile normalisation, audit diffing), the authorization predicates, the scoping extension against a real database, and the HTTP API end to end.
 
 ## How it is put together
 
 ```
 client/   React 19, React Router, Tailwind, Vite
 server/   Express 5, Prisma 7, PostgreSQL
-e2e/      Playwright specs driving the real UI
 ```
 
 **The database holds no logic.** No triggers, no stored procedures, no row-level security, no generated columns — 20 Prisma models and nothing else. Every rule lives in TypeScript where it can be read, tested and stepped through. The test-database builder asserts the schema contains zero `plpgsql` functions on every run, so this does not quietly erode.
@@ -82,7 +78,6 @@ e2e/      Playwright specs driving the real UI
 | `npm run build` | build both |
 | `npm run typecheck` | both workspaces |
 | `npm test` | typecheck, build, backend suite |
-| `npm run test:e2e` | browser suite |
 | `npm run db:migrate` | apply migrations |
 | `npm run db:seed` | load sample data |
 | `npm -w server run db:studio` | browse the database |

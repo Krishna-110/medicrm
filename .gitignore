@@ -10,6 +10,12 @@ dist-ssr/
 .env.*
 !.env.example
 
+# Browser tests and CI are kept out of this repository by request. The files still exist
+# locally — `npm run test:e2e` works on a machine that has them — they are simply not tracked.
+.github/
+playwright.config.ts
+e2e/
+
 # Playwright output
 /test-results/
 /playwright-report/
