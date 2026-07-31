@@ -1,0 +1,14 @@
+# Keep line endings consistent across Windows and Linux checkouts.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+
+# GitHub's language bar measures bytes of tracked files, so generated files can dominate it
+# and misrepresent what the project is. These directives affect that statistic only — nothing
+# is excluded from the repository, from builds, or from search.
+#
+# The SQL here is emitted by `prisma migrate`, not written by hand; the schema is the source
+# of truth and lives in server/prisma/schema.prisma.
+server/prisma/migrations/**/*.sql linguist-generated
+package-lock.json                 linguist-generated
