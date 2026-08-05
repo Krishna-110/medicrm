@@ -593,8 +593,15 @@ export function Leads() {
             <span className="field-label" id="leads-medicines-label">Medicines Required</span>
             <div className="space-y-3" role="group" aria-labelledby="leads-medicines-label">
               {form.medicines.map((row, idx) => (
-                <div key={row.id} className="flex items-start gap-2">
-                  <div className="flex-1">
+                <div key={row.id} className="flex flex-wrap items-start gap-2">
+                  {/*
+                   * The search takes a whole row on phones. Sharing one line with the days
+                   * field and the delete button left it around 150px wide, which truncated
+                   * every medicine name both in the field and in the dropdown beneath it —
+                   * "Dardantak Powder" rendered as "Dardant...". From `sm` up there is room
+                   * for the original single-row layout, so nothing changes there.
+                   */}
+                  <div className="w-full min-w-0 sm:flex-1">
                     <SearchableSelect
                       value={row.name}
                       onChange={name => updateMedicineRow(row.id, { name })}
@@ -606,27 +613,30 @@ export function Leads() {
                       required={idx === 0 && !editingLead}
                     />
                   </div>
-                  <div className="w-28">
-                    <input
-                      type="number"
-                      min={1}
-                      required={idx === 0 && !editingLead}
-                      value={row.days}
-                      onChange={e => updateMedicineRow(row.id, { days: e.target.value })}
-                      placeholder="Days"
-                      aria-label={`Days supply for medicine ${idx + 1}`}
-                      className="field-input"
-                    />
+                  <div className="flex w-full items-start gap-2 sm:w-auto">
+                    <div className="flex-1 sm:w-28 sm:flex-none">
+                      <input
+                        type="number"
+                        min={1}
+                        required={idx === 0 && !editingLead}
+                        value={row.days}
+                        onChange={e => updateMedicineRow(row.id, { days: e.target.value })}
+                        placeholder="Days"
+                        aria-label={`Days supply for medicine ${idx + 1}`}
+                        className="field-input"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeMedicineRow(row.id)}
+                      disabled={form.medicines.length === 1}
+                      title="Remove medicine"
+                      aria-label={`Remove medicine ${idx + 1}`}
+                      className="mt-0.5 shrink-0 rounded-lg p-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30 sm:p-2"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeMedicineRow(row.id)}
-                    disabled={form.medicines.length === 1}
-                    title="Remove medicine"
-                    className="mt-0.5 shrink-0 rounded-lg p-2 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30"
-                  >
-                    <Trash2 size={16} />
-                  </button>
                 </div>
               ))}
             </div>

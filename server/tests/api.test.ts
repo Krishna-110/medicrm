@@ -185,6 +185,25 @@ describe('lead lifecycle', () => {
     expect((await as(admin).post(`/api/leads/${id}/follow-ups`, { scheduledDate: '2026-12-01', type: 'call' })).status).toBe(201);
   });
 
+  it('sets, round-trips and clears the follow-up date', async () => {
+    // Regression. nextFollowUpAt is a DateTime, but a date input sends 'YYYY-MM-DD' or ''.
+    // Both went to Prisma untouched — '' is not nullish, so `?? null` never caught it — and
+    // both returned 500, meaning a follow-up date could neither be set nor removed.
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+
+    const set = await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-12-24' });
+    expect(set.status).toBe(200);
+    // Round-trips as the same calendar date, rather than slipping a day through the timezone.
+    expect(set.body.nextFollowUp).toBe('2026-12-24');
+
+    const cleared = await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '' });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.nextFollowUp).toBe('');
+
+    const bad = await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: 'not-a-date' });
+    expect(bad.status).toBe(400);
+  });
+
   it('converts to an order, deducting stock and closing the lead', async () => {
     const product = await prisma.product.findFirstOrThrow({ where: { brandName: 'Atorva' } });
     const stockBefore = product.stockQuantity;

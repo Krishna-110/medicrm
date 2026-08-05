@@ -183,7 +183,7 @@ export function SearchableSelect({
               type="button"
               onClick={() => selectOption(option)}
               onMouseEnter={() => setHighlighted(idx)}
-              className={`flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left text-sm transition-colors ${
+              className={`flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left text-sm transition-colors sm:py-2 ${
                 idx === highlighted ? 'bg-primary-50 text-primary-700' : 'text-ink-700 hover:bg-ink-50'
               }`}
             >
@@ -202,7 +202,7 @@ export function SearchableSelect({
               type="button"
               onClick={selectCreateNew}
               onMouseEnter={() => setHighlighted(filtered.length)}
-              className={`mt-1 flex w-full items-center gap-2 border-t border-ink-100 px-3.5 py-2 pt-2.5 text-left text-sm font-medium transition-colors ${
+              className={`mt-1 flex w-full items-center gap-2 border-t border-ink-100 px-3.5 py-2.5 pt-2.5 text-left text-sm font-medium transition-colors sm:py-2 ${
                 highlighted === filtered.length ? 'bg-primary-50 text-primary-700' : 'text-primary-600 hover:bg-primary-50'
               }`}
             >

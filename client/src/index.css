@@ -140,6 +140,17 @@ h1, h2, h3, h4 {
   transition: border-color 0.15s, box-shadow 0.15s;
   outline: none;
 }
+/*
+ * 16px on phones. Mobile Safari zooms the page in whenever a focused input's text is smaller
+ * than that, which shifts the layout mid-typing; the slightly taller box also gives a
+ * comfortable touch target. The tighter 14px returns from `sm` up, where neither applies.
+ */
+@media (max-width: 639px) {
+  .field-input {
+    font-size: 1rem;
+    padding: 0.625rem 0.75rem;
+  }
+}
 .field-input::placeholder { color: #94a3b8; }
 .field-input:focus {
   border-color: #6090fa;

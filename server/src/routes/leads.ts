@@ -37,6 +37,25 @@ const EDITABLE = {
   lastFollowUp: 'lastFollowUpAt',
 } as const;
 
+/**
+ * Columns in EDITABLE that hold a DateTime. The client sends a date input's value, which is
+ * either 'YYYY-MM-DD' or '' — neither of which Prisma accepts for a DateTime.
+ *
+ * Both spellings used to 500: the string was handed to Prisma untouched, and `?? null` does
+ * not catch '' because an empty string is not nullish. So setting a follow-up date failed,
+ * and so did clearing one.
+ */
+const DATE_COLUMNS = new Set(['nextFollowUpAt', 'lastFollowUpAt']);
+
+function toDateOrNull(field: string, value: unknown): Date | null {
+  if (value == null || value === '') return null;
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) {
+    throw ApiError.badRequest(`${field} must be a date in YYYY-MM-DD form`);
+  }
+  return parsed;
+}
+
 const REQUIRED = ['customerName', 'mobile', 'address', 'city', 'state', 'pincode', 'disease'] as const;
 
 leadsRouter.get(
@@ -182,7 +201,10 @@ leadsRouter.patch(
     const data: Record<string, unknown> = {};
     for (const [apiField, column] of Object.entries(EDITABLE)) {
       // `in` rather than a truthiness check, so an explicit null clears the field.
-      if (apiField in body) data[column] = body[apiField] ?? null;
+      if (!(apiField in body)) continue;
+      data[column] = DATE_COLUMNS.has(column)
+        ? toDateOrNull(apiField, body[apiField])
+        : (body[apiField] ?? null);
     }
     if (typeof data.mobile === 'string') data.mobile = normalizeIndianMobile(data.mobile);
     if ('assignedCaller' in body) data.assignedCallerId = body.assignedCaller ?? null;
