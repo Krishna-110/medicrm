@@ -34,6 +34,4 @@ export const leadsApi = {
   convertPreview: (id: string) => api.get<ConversionPreview>(`/leads/${id}/convert-preview`),
   convert: (id: string, payload: ConvertPayload) =>
     api.post<{ order: Order; lead: Lead }>(`/leads/${id}/convert`, payload),
-  scheduleFollowUp: (id: string, data: { scheduledDate: string; type?: string; notes?: string }) =>
-    api.post<{ followUp: FollowUp; lead: Lead }>(`/leads/${id}/follow-ups`, data),
 };

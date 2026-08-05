@@ -162,23 +162,6 @@ export function LeadDetailPage() {
     setShowConvertConfirm(false)
   }
 
-  async function handleScheduleFollowUp() {
-    if (!lead) return
-    const nextDate = new Date()
-    nextDate.setDate(nextDate.getDate() + 1)
-    const dateStr = nextDate.toISOString().split('T')[0]
-    try {
-      const { followUp, lead: updatedLead } = await leadsApi.scheduleFollowUp(lead.id, {
-        scheduledDate: dateStr,
-        type: 'call',
-      })
-      dispatch({ type: 'ADD_FOLLOW_UP', payload: { followUp } })
-      dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to schedule follow-up')
-    }
-  }
-
   const sortedActivities = [...(lead.activities || [])].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )
@@ -241,7 +224,10 @@ export function LeadDetailPage() {
             variant="primary"
             size="sm"
             icon={<CalendarPlus size={14} />}
-            onClick={handleScheduleFollowUp}
+            // Opens the lead's edit form, where Next Follow-up lives. It used to POST a
+            // follow-up for tomorrow with no date picker, and destructured a { followUp, lead }
+            // the endpoint never returned — so it threw before anything reached the UI.
+            onClick={() => navigate('/leads', { state: { editLeadId: lead.id } })}
           >
             Schedule Follow-up
           </Button>
