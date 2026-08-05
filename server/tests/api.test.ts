@@ -379,6 +379,46 @@ describe('error mapping', () => {
     expect(res.status).toBe(400);
   });
 
+  it('an id that is not a UUID -> 400, not 500', async () => {
+    // Prisma raises P2007 for this. It was in none of the mapped codes, so a typo in a URL
+    // came back as a server fault.
+    const res = await as(admin).get('/api/leads/not-a-uuid');
+    expect(res.status).toBe(400);
+  });
+
+  it('a value Prisma rejects -> 400 naming the field, not 500', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const created = await as(admin).post(`/api/leads/${lead.id}/follow-ups`, {
+      scheduledDate: '2026-12-01',
+      type: 'call',
+    });
+
+    const res = await as(admin).patch(`/api/follow-ups/${created.body.id}`, { scheduledDate: 'garbage' });
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/invalid value/i);
+  });
+
+  it('a query fault of our own still -> 500, not a 400 blaming the caller', async () => {
+    // The guard on the rule above. Prisma raises PrismaClientValidationError both for a value
+    // the client got wrong and for an argument this codebase got wrong, so the downgrade to
+    // 400 keys on "Invalid value for argument" specifically. If it were applied to the whole
+    // error class, our own bugs would be reported as the caller's fault and would vanish from
+    // the error rate. This asserts the second kind is still a 500.
+    const { errorMiddleware } = await import('../src/lib/errors.js');
+    const unknownArgument = Object.assign(
+      new Error('Unknown argument `noSuchColumn`. Available options are marked with ?.'),
+      { name: 'PrismaClientValidationError' },
+    );
+
+    let status = 0;
+    const res = {
+      status(code: number) { status = code; return this; },
+      json() { return this; },
+    };
+    errorMiddleware(unknownArgument, {} as never, res as never, (() => {}) as never);
+    expect(status).toBe(500);
+  });
+
   it('an unknown route -> 404 JSON, not an HTML page', async () => {
     const res = await as(admin).get('/api/does-not-exist');
     expect(res.status).toBe(404);

@@ -42,7 +42,34 @@ const PRISMA_STATUS: Record<string, number> = {
   P2025: 404, // record required but not found
   P2000: 400, // value too long for column
   P2011: 400, // null constraint violation
+  P2007: 400, // data validation error — e.g. an id in the path that is not a UUID
 };
+
+/**
+ * A wrong-typed value the client supplied, if that is what this error is.
+ *
+ * Prisma raises PrismaClientValidationError for two unrelated faults, and the class alone
+ * cannot tell them apart:
+ *
+ *   - the client sent a value of the wrong type   — the request is at fault, 400
+ *   - our query names an argument that does not exist — we are at fault, 500
+ *
+ * Only the message separates them: "Invalid value for argument `x`" is the first, while
+ * "Unknown argument `x`" and a missing required argument are the second. So this downgrade is
+ * deliberately narrow — it applies only where Prisma states the VALUE was invalid, and
+ * anything else stays a 500, including wording we do not recognise should Prisma reword it.
+ *
+ * Mapping the whole class to 400 would be easier and wrong: it would report our own query
+ * bugs as the caller's fault and drop them out of the error rate entirely.
+ */
+const INVALID_VALUE = /Invalid value for argument `([^`]+)`/;
+
+function invalidValueField(err: unknown): string | undefined {
+  // Matched structurally, like the Prisma error above, so this module stays free of runtime
+  // imports from the client.
+  if (!(err instanceof Error) || err.name !== 'PrismaClientValidationError') return undefined;
+  return INVALID_VALUE.exec(err.message)?.[1];
+}
 
 /** Friendlier text for the unique constraints a user can actually hit. */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
@@ -109,6 +136,15 @@ export function errorMiddleware(err: unknown, _req: Request, res: Response, _nex
     'body' in err
   ) {
     res.status(400).json({ error: 'Malformed JSON in request body' });
+    return;
+  }
+
+  const field = invalidValueField(err);
+  if (field) {
+    // Logged even though it is a 400. A coercion gap in a route surfaces here too, and an
+    // error that never reaches the log is one nobody goes looking for.
+    console.error(err);
+    res.status(400).json({ error: `Invalid value for '${field}'` });
     return;
   }
 
