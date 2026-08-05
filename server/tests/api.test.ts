@@ -390,6 +390,43 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(after.body.nextFollowUp).toBe('2026-10-05');
   });
 
+  it('logging an activity returns { activity, medicine } and actually saves the medicine', async () => {
+    // Same shape bug, third instance: this returned the activity alone while the client
+    // destructured { activity, medicine }, and the medicine in the body was read and dropped.
+    // Nothing threw — an undefined activity went into the store and the medicine vanished.
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+
+    const res = await as(admin).post(`/api/leads/${lead.id}/activities`, {
+      description: 'called, also wants Sansamrit',
+      medicine: { name: 'Sansamrit', days: 30 },
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.activity.description).toMatch(/Sansamrit/);
+    expect(res.body.medicine.name).toBe('Sansamrit');
+
+    const after = await as(admin).get(`/api/leads/${lead.id}`);
+    expect(after.body.medicines.map((m: { name: string }) => m.name)).toContain('Sansamrit');
+  });
+
+  it('completing returns { followUp, lead }, which is what the UI destructures', async () => {
+    // The shape, not just the status code. This endpoint returned the follow-up alone while
+    // both callers destructured { followUp, lead } — so `lead.id` threw AFTER the write had
+    // committed: the row changed and the screen did not. Every test here passed throughout,
+    // because they all re-fetch the lead instead of reading the response.
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-10-01' });
+    const [followUp] = (await as(admin).get('/api/follow-ups')).body.filter(
+      (f: { leadId?: string }) => f.leadId === lead.id,
+    );
+
+    const res = await as(admin).patch(`/api/follow-ups/${followUp.id}`, { status: 'completed' });
+    expect(res.status).toBe(200);
+    expect(res.body.followUp.status).toBe('completed');
+    expect(res.body.lead.id).toBe(lead.id);
+    // The lead travels back already updated, so the client need not re-fetch to stay honest.
+    expect(res.body.lead.nextFollowUp).toBe('');
+  });
+
   it('completing the next follow-up advances the lead to the one after it', async () => {
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
     const first = await as(admin).post(`/api/leads/${lead.id}/follow-ups`, { scheduledDate: '2026-10-05' });

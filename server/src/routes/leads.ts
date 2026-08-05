@@ -5,7 +5,7 @@ import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
-import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeOrder } from '../lib/serialize.js';
+import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { convertLeadToOrder, previewConversion } from '../services/conversion.js';
 import {
@@ -19,7 +19,7 @@ import { auditCreate, auditUpdate } from '../services/audit.js';
 export const leadsRouter = Router();
 
 /** Children a lead is always returned with. Activities newest-first, medicines in entry order. */
-const WITH_CHILDREN = {
+export const WITH_CHILDREN = {
   medicines: { orderBy: { createdAt: 'asc' } },
   activities: { orderBy: { createdAt: 'desc' } },
 } as const;
@@ -66,9 +66,9 @@ async function createLeadMedicine(
   tx: Tx,
   leadId: string,
   m: { name: string; days?: number | string },
-): Promise<void> {
+) {
   const product = await findCatalogueProductByName(tx, m.name);
-  await tx.leadMedicine.create({
+  return tx.leadMedicine.create({
     data: {
       leadId,
       productId: product?.id ?? null,
@@ -280,15 +280,27 @@ leadsRouter.post(
     const lead = await db.lead.findFirst({ where: { id: param(req, 'id'), deletedAt: null } });
     if (!lead) throw ApiError.notFound('Lead not found');
 
-    const activity = await prisma.leadActivity.create({
-      data: {
-        leadId: lead.id,
-        activityType: body.activityType ?? 'comment',
-        description: body.description,
-        createdBy: actor.userId,
-      },
+    // The medicine is optional and was previously read from the body and thrown away, so a
+    // caller who noted "patient also wants X" while logging a call lost X silently.
+    const { activity, medicine } = await prisma.$transaction(async (tx) => {
+      const created = await tx.leadActivity.create({
+        data: {
+          leadId: lead.id,
+          activityType: body.activityType ?? 'comment',
+          description: body.description,
+          createdBy: actor.userId,
+        },
+      });
+      const added = body.medicine?.name
+        ? await createLeadMedicine(tx, lead.id, body.medicine)
+        : null;
+      return { activity: created, medicine: added };
     });
-    res.status(201).json(serializeLeadActivity(activity));
+
+    res.status(201).json({
+      activity: serializeLeadActivity(activity),
+      medicine: medicine ? serializeLeadMedicine(medicine) : null,
+    });
   }),
 );
 

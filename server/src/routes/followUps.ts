@@ -3,7 +3,8 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
-import { serializeFollowUp } from '../lib/serialize.js';
+import { serializeFollowUp, serializeLead } from '../lib/serialize.js';
+import { WITH_CHILDREN } from './leads.js';
 import { syncNextFollowUp } from '../services/leads.js';
 
 export const followUpsRouter = Router();
@@ -40,7 +41,7 @@ followUpsRouter.patch(
     if ('type' in body) data.type = body.type;
     if (Object.keys(data).length === 0) throw ApiError.badRequest('no updatable fields provided');
 
-    const followUp = await prisma.$transaction(async (tx) => {
+    const { followUp, lead } = await prisma.$transaction(async (tx) => {
       const updated = await tx.followUp.update({ where: { id }, data });
       // Completing a follow-up advances the lead's last-contacted marker, which is what the
       // list view sorts and filters on.
@@ -53,9 +54,17 @@ followUpsRouter.patch(
       // Completing or rescheduling changes which follow-up is next, so the lead's copy of
       // that date has to be rebuilt — otherwise it keeps pointing at a task already done.
       if (updated.leadId) await syncNextFollowUp(tx, updated.leadId);
-      return updated;
+
+      // The lead goes back with it. Both its last- and next-follow-up dates just changed, and
+      // the two callers of this endpoint were already destructuring { followUp, lead } — the
+      // bare follow-up left them reading .id off undefined, which threw after the write had
+      // already succeeded. The row updated; the screen did not.
+      const fresh = updated.leadId
+        ? await tx.lead.findUnique({ where: { id: updated.leadId }, include: WITH_CHILDREN })
+        : null;
+      return { followUp: updated, lead: fresh };
     });
 
-    res.json(serializeFollowUp(followUp));
+    res.json({ followUp: serializeFollowUp(followUp), lead: lead ? serializeLead(lead) : null });
   }),
 );
