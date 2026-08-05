@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Phone, Bell, RotateCcw, Eye, CheckCircle2, C
 import { useApp } from '@/context/AppContext'
 import { followUpsApi } from '@/api/followUps'
 import { emitToast } from '@/lib/toast'
-import { formatIndianDate } from '@/lib/dateUtils'
+import { formatIndianDate, istToday } from '@/lib/dateUtils'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { FollowUp } from '@/types'
 
-const TODAY = new Date().toISOString().slice(0, 10)
+const TODAY = istToday()
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 type ViewMode = 'daily' | 'weekly' | 'monthly'

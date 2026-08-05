@@ -18,6 +18,10 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { LeadStatusBadge } from '@/components/ui/StatusBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { followUpsApi } from '@/api/followUps'
+import { emitToast } from '@/lib/toast'
+import { istToday } from '@/lib/dateUtils'
 import type { LeadStatus } from '@/types'
 
 function formatRupees(amount: number) {
@@ -92,10 +96,30 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 }
 
 export function Dashboard() {
-  const { state } = useApp()
+  const { state, dispatch } = useApp()
   const navigate = useNavigate()
 
   const dashboard = state.dashboard
+
+  // Follow-ups are already loaded and already scoped to the signed-in caller, so "my tasks"
+  // is a filter, not a fetch. Overdue first: yesterday's missed call matters more than a
+  // call due at 5pm.
+  const myTasks = useMemo(() => {
+    const today = istToday()
+    return state.followUps
+      .filter((f) => f.status === 'pending' && f.scheduledDate <= today)
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
+  }, [state.followUps])
+
+  async function completeTask(id: string) {
+    try {
+      const { followUp, lead } = await followUpsApi.updateStatus(id, 'completed')
+      dispatch({ type: 'UPDATE_FOLLOW_UP', payload: { id: followUp.id, updates: followUp } })
+      if (lead) dispatch({ type: 'UPDATE_LEAD', payload: { id: lead.id, updates: lead } })
+    } catch (err) {
+      emitToast(err instanceof Error ? err.message : 'Failed to mark follow-up complete')
+    }
+  }
 
   const leadStatusCounts = useMemo(() => {
     const counts: Partial<Record<LeadStatus, number>> = {}
@@ -143,6 +167,53 @@ export function Dashboard() {
         title="Dashboard"
         description="Welcome back — here's what's happening across your pipeline today."
       />
+
+      {/*
+       * A caller's own work for today. Admins see every caller's follow-ups through the same
+       * scoped list, which is a report rather than a to-do list, so this is caller-only.
+       */}
+      {state.currentUser?.role === 'caller' && (
+        <Card>
+          <div className="p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-ink-900">My Tasks Today</h2>
+              <Badge variant={myTasks.length ? 'warning' : 'success'}>
+                {myTasks.length ? `${myTasks.length} to do` : 'All clear'}
+              </Badge>
+            </div>
+
+            {myTasks.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-500">Nothing due today. Overdue work would appear here too.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-ink-100">
+                {myTasks.map((task) => {
+                  const overdue = task.scheduledDate < istToday()
+                  return (
+                    <li key={task.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => task.leadId && navigate(`/leads/${task.leadId}`)}
+                        disabled={!task.leadId}
+                        className="min-w-0 flex-1 text-left text-sm font-medium text-ink-900 hover:text-primary-700 disabled:hover:text-ink-900"
+                      >
+                        <span className="block truncate">{task.customerName}</span>
+                        <span className="text-xs font-normal text-ink-500">
+                          {task.type}
+                          {overdue && ` · overdue since ${task.scheduledDate}`}
+                        </span>
+                      </button>
+                      {overdue && <Badge variant="danger">Overdue</Badge>}
+                      <Button size="sm" variant="secondary" onClick={() => completeTask(task.id)}>
+                        Done
+                      </Button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">

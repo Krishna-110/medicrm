@@ -2,6 +2,17 @@
  * Utility functions for Indian Date and Time formatting (en-IN locale)
  */
 
+/**
+ * Today's IST calendar date as YYYY-MM-DD.
+ *
+ * en-CA already formats that way, so nothing needs assembling. toISOString() would give the
+ * UTC date, which is the wrong day between IST midnight and 05:30 — and every date in this
+ * app is an IST date.
+ */
+export function istToday(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
 function parseToDate(input: string | Date | null | undefined): Date | null {
   if (!input) return null
   if (input instanceof Date) return isNaN(input.getTime()) ? null : input
