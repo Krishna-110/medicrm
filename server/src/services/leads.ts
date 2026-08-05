@@ -58,3 +58,74 @@ export async function recordAssignment(
     data: { assignedCallerId: to },
   });
 }
+
+/**
+ * Rebuilds a lead's nextFollowUpAt from the follow-ups actually scheduled for it.
+ *
+ * The column is a denormalised copy of "the earliest pending follow-up", and is what the
+ * leads list renders under NEXT FOLLOW-UP. Nothing maintained it in either direction:
+ * scheduling a follow-up left the column untouched, and writing the column created no
+ * follow-up. So a lead could advertise a date the calendar knew nothing about — which is
+ * exactly what it did.
+ *
+ * Recomputed from the follow-ups rather than written alongside them, for the reason at the
+ * top of this file: a derived value maintained in two places eventually disagrees with
+ * itself, and this repairs whatever it finds.
+ */
+export async function syncNextFollowUp(tx: Tx, leadId: string): Promise<void> {
+  const next = await tx.followUp.findFirst({
+    where: { leadId, deletedAt: null, status: 'pending' },
+    orderBy: { scheduledAt: 'asc' },
+    select: { scheduledAt: true },
+  });
+  await tx.lead.update({
+    where: { id: leadId },
+    data: { nextFollowUpAt: next?.scheduledAt ?? null },
+  });
+}
+
+/**
+ * Points a lead's pending follow-up at `when`, creating or retiring one as needed.
+ *
+ * This is what the lead form's "Next Follow-up" field does now. Writing the column alone
+ * scheduled nothing, so the task never reached the calendar or the lead's own page.
+ */
+export async function scheduleNextFollowUp(
+  tx: Tx,
+  actor: Actor,
+  lead: { id: string; customerId: string | null; customerName: string; assignedCallerId: string | null },
+  when: Date | null,
+): Promise<void> {
+  const existing = await tx.followUp.findFirst({
+    where: { leadId: lead.id, deletedAt: null, status: 'pending' },
+    orderBy: { scheduledAt: 'asc' },
+    select: { id: true },
+  });
+
+  if (when) {
+    if (existing) {
+      await tx.followUp.update({ where: { id: existing.id }, data: { scheduledAt: when } });
+    } else {
+      await tx.followUp.create({
+        data: {
+          leadId: lead.id,
+          customerId: lead.customerId,
+          customerName: lead.customerName,
+          scheduledAt: when,
+          // The form offers a date and nothing else, so this matches the default used when a
+          // follow-up is created explicitly without a type.
+          type: 'call',
+          status: 'pending',
+          assignedCallerId: lead.assignedCallerId,
+          createdBy: actor.userId,
+        },
+      });
+    }
+  } else if (existing) {
+    // Clearing the date retires the task rather than deleting it, so one that was scheduled
+    // and then called off still exists to be found.
+    await tx.followUp.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
+  }
+
+  await syncNextFollowUp(tx, lead.id);
+}

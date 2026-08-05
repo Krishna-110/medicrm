@@ -254,10 +254,15 @@ export function Calendar() {
                 ))}
               </div>
               {/* Day cells */}
-              <div className="grid grid-cols-7 gap-1.5">
+              {/*
+               * Cell height is per-breakpoint, not fixed. Seven columns on a 375px screen
+               * leaves each one about 40px wide, so the old flat min-h-[104px] drew a grid of
+               * tall, near-empty slots that pushed the month well past a screenful.
+               */}
+              <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
                 {calendarGrid.map((dateStr, i) => {
                   if (!dateStr) {
-                    return <div key={`empty-${i}`} className="min-h-[104px] rounded-lg border border-ink-100 bg-ink-50/30" />
+                    return <div key={`empty-${i}`} className="min-h-[52px] rounded-lg border border-ink-100 bg-ink-50/30 sm:min-h-[104px]" />
                   }
                   const dayNum = parseDate(dateStr).day
                   const dayFollowUps = followUpsByDate[dateStr] ?? []
@@ -268,7 +273,7 @@ export function Calendar() {
                     <div
                       key={dateStr}
                       onClick={() => setSelectedDay(dateStr)}
-                      className={`min-h-[104px] rounded-lg border border-ink-100 p-2 cursor-pointer transition-colors hover:bg-ink-50 hover:border-ink-200
+                      className={`min-h-[52px] rounded-lg border border-ink-100 p-1 cursor-pointer transition-colors hover:bg-ink-50 hover:border-ink-200 sm:min-h-[104px] sm:p-2
                         ${today ? 'ring-2 ring-primary-500/40 bg-primary-50/40' : ''}
                         ${selected ? 'ring-2 ring-primary-500' : ''}`}
                     >
@@ -277,21 +282,36 @@ export function Calendar() {
                         {dayNum}
                       </span>
                       {dayFollowUps.length > 0 && (
-                        <div className="mt-1.5 space-y-1">
-                          {dayFollowUps.slice(0, 3).map(f => (
-                            <div
-                              key={f.id}
-                              title={f.customerName}
-                              className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium truncate ${getChipClasses(f)}`}
-                            >
-                              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getDotColor(f)}`} />
-                              <span className="truncate">{f.customerName}</span>
-                            </div>
-                          ))}
-                          {dayFollowUps.length > 3 && (
-                            <span className="block px-1.5 text-[10px] text-ink-400">+{dayFollowUps.length - 3} more</span>
-                          )}
-                        </div>
+                        <>
+                          {/*
+                           * Phones get dots. A name chip inside a 40px cell renders as one
+                           * letter and an ellipsis, which tells you less than a dot does —
+                           * and tapping the day already opens the full list underneath.
+                           */}
+                          <div className="mt-1 flex flex-wrap gap-0.5 sm:hidden">
+                            {dayFollowUps.slice(0, 4).map(f => (
+                              <span key={f.id} className={`h-1.5 w-1.5 rounded-full ${getDotColor(f)}`} />
+                            ))}
+                            {dayFollowUps.length > 4 && (
+                              <span className="text-[9px] leading-none text-ink-400">+</span>
+                            )}
+                          </div>
+                          <div className="mt-1.5 hidden space-y-1 sm:block">
+                            {dayFollowUps.slice(0, 3).map(f => (
+                              <div
+                                key={f.id}
+                                title={f.customerName}
+                                className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium truncate ${getChipClasses(f)}`}
+                              >
+                                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getDotColor(f)}`} />
+                                <span className="truncate">{f.customerName}</span>
+                              </div>
+                            ))}
+                            {dayFollowUps.length > 3 && (
+                              <span className="block px-1.5 text-[10px] text-ink-400">+{dayFollowUps.length - 3} more</span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   )

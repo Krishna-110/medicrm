@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
-import { ApiError, param, route } from '../lib/errors.js';
+import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { serializeFollowUp } from '../lib/serialize.js';
+import { syncNextFollowUp } from '../services/leads.js';
 
 export const followUpsRouter = Router();
 
@@ -31,7 +32,11 @@ followUpsRouter.patch(
     const data: Record<string, unknown> = {};
     if ('status' in body) data.status = body.status;
     if ('notes' in body) data.notes = body.notes ?? null;
-    if ('scheduledDate' in body) data.scheduledAt = new Date(body.scheduledDate);
+    if ('scheduledDate' in body) {
+      const when = toDateOrNull('scheduledDate', body.scheduledDate);
+      if (!when) throw ApiError.badRequest('scheduledDate cannot be empty');
+      data.scheduledAt = when;
+    }
     if ('type' in body) data.type = body.type;
     if (Object.keys(data).length === 0) throw ApiError.badRequest('no updatable fields provided');
 
@@ -45,6 +50,9 @@ followUpsRouter.patch(
           data: { lastFollowUpAt: new Date() },
         });
       }
+      // Completing or rescheduling changes which follow-up is next, so the lead's copy of
+      // that date has to be rebuilt — otherwise it keeps pointing at a task already done.
+      if (updated.leadId) await syncNextFollowUp(tx, updated.leadId);
       return updated;
     });
 

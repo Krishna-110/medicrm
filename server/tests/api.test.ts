@@ -246,6 +246,66 @@ describe('lead lifecycle', () => {
   });
 });
 
+describe('follow-up scheduling stays in step with the lead', () => {
+  // lead.nextFollowUpAt is a denormalised copy of "the earliest pending follow-up", and
+  // nothing kept the two together: setting the date scheduled nothing, and scheduling a
+  // follow-up left the date empty. A lead showed a NEXT FOLLOW-UP the calendar had never
+  // heard of, which is precisely how it was noticed.
+  const followUpsFor = async (leadId: string) => {
+    const res = await as(admin).get('/api/follow-ups');
+    return (res.body as { leadId?: string }[]).filter((f) => f.leadId === leadId);
+  };
+
+  it('setting the date on a lead schedules a real follow-up', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-09-15' });
+
+    const followUps = await followUpsFor(lead.id);
+    expect(followUps).toHaveLength(1);
+    expect(followUps[0]).toMatchObject({ scheduledDate: '2026-09-15', status: 'pending' });
+  });
+
+  it('moving the date moves the same follow-up rather than adding another', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-09-15' });
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-09-20' });
+
+    const followUps = await followUpsFor(lead.id);
+    expect(followUps).toHaveLength(1);
+    expect(followUps[0]).toMatchObject({ scheduledDate: '2026-09-20' });
+  });
+
+  it('clearing the date retires the follow-up', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-09-15' });
+    const cleared = await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '' });
+
+    expect(cleared.body.nextFollowUp).toBe('');
+    expect(await followUpsFor(lead.id)).toHaveLength(0);
+  });
+
+  it('scheduling a follow-up directly fills in the lead’s date', async () => {
+    // The other direction, which was equally broken.
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/follow-ups`, { scheduledDate: '2026-10-05', type: 'call' });
+
+    const after = await as(admin).get(`/api/leads/${lead.id}`);
+    expect(after.body.nextFollowUp).toBe('2026-10-05');
+  });
+
+  it('completing the next follow-up advances the lead to the one after it', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const first = await as(admin).post(`/api/leads/${lead.id}/follow-ups`, { scheduledDate: '2026-10-05' });
+    await as(admin).post(`/api/leads/${lead.id}/follow-ups`, { scheduledDate: '2026-11-05' });
+
+    expect((await as(admin).get(`/api/leads/${lead.id}`)).body.nextFollowUp).toBe('2026-10-05');
+
+    await as(admin).patch(`/api/follow-ups/${first.body.id}`, { status: 'completed' });
+    // Recomputed, not merely blanked: the later follow-up is now the next one.
+    expect((await as(admin).get(`/api/leads/${lead.id}`)).body.nextFollowUp).toBe('2026-11-05');
+  });
+});
+
 describe('authorization', () => {
   it('admin-only endpoints refuse a caller with 403, and write nothing', async () => {
     const med = (await as(admin).get('/api/medicines')).body[0];
@@ -386,7 +446,7 @@ describe('error mapping', () => {
     expect(res.status).toBe(400);
   });
 
-  it('a value Prisma rejects -> 400 naming the field, not 500', async () => {
+  it('an unusable date is rejected by the route, before Prisma', async () => {
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
     const created = await as(admin).post(`/api/leads/${lead.id}/follow-ups`, {
       scheduledDate: '2026-12-01',
@@ -395,7 +455,28 @@ describe('error mapping', () => {
 
     const res = await as(admin).patch(`/api/follow-ups/${created.body.id}`, { scheduledDate: 'garbage' });
     expect(res.status).toBe(400);
-    expect(String(res.body.error)).toMatch(/invalid value/i);
+    expect(String(res.body.error)).toMatch(/YYYY-MM-DD/);
+  });
+
+  it('a value Prisma rejects -> 400 naming the field, not 500', async () => {
+    // Exercised directly rather than through a route. The routes that used to reach Prisma
+    // with an unconverted value now validate first, which is the better place for it — but
+    // the mapping still has to hold for any value that slips past a route in future.
+    const { errorMiddleware } = await import('../src/lib/errors.js');
+    const wrongType = Object.assign(
+      new Error('Invalid value for argument `scheduledAt`: premature end of input. Expected ISO-8601 DateTime.'),
+      { name: 'PrismaClientValidationError' },
+    );
+
+    let status = 0;
+    let payload: { error?: string } = {};
+    const res = {
+      status(code: number) { status = code; return this; },
+      json(body: { error?: string }) { payload = body; return this; },
+    };
+    errorMiddleware(wrongType, {} as never, res as never, (() => {}) as never);
+    expect(status).toBe(400);
+    expect(String(payload.error)).toMatch(/scheduledAt/);
   });
 
   it('a query fault of our own still -> 500, not a 400 blaming the caller', async () => {

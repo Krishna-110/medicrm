@@ -187,6 +187,22 @@ export function route<T extends Request>(
  * repeat a name. Ours never do, so this narrows once here rather than casting at every call
  * site — and turns a malformed URL into a 400 instead of a type assertion that lies.
  */
+/**
+ * A date-only request value as a Date, or null.
+ *
+ * A date input sends 'YYYY-MM-DD' when set and '' when cleared, and neither is something
+ * Prisma accepts for a DateTime. Passing them through unconverted made both a 500 — '' in
+ * particular slips past `?? null`, because an empty string is not nullish.
+ */
+export function toDateOrNull(field: string, value: unknown): Date | null {
+  if (value == null || value === '') return null;
+  const parsed = new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) {
+    throw ApiError.badRequest(`${field} must be a date in YYYY-MM-DD form`);
+  }
+  return parsed;
+}
+
 export function param(req: { params: Record<string, unknown> }, name: string): string {
   const value = req.params[name];
   if (typeof value !== 'string' || value.length === 0) {

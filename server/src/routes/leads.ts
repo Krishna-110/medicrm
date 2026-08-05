@@ -2,12 +2,17 @@ import { Router } from 'express';
 import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
-import { ApiError, param, route } from '../lib/errors.js';
+import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
 import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeOrder } from '../lib/serialize.js';
 import { convertLeadToOrder } from '../services/conversion.js';
-import { recountAssignedLeads, recordAssignment } from '../services/leads.js';
+import {
+  recountAssignedLeads,
+  recordAssignment,
+  scheduleNextFollowUp,
+  syncNextFollowUp,
+} from '../services/leads.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
 
 export const leadsRouter = Router();
@@ -46,15 +51,6 @@ const EDITABLE = {
  * and so did clearing one.
  */
 const DATE_COLUMNS = new Set(['nextFollowUpAt', 'lastFollowUpAt']);
-
-function toDateOrNull(field: string, value: unknown): Date | null {
-  if (value == null || value === '') return null;
-  const parsed = new Date(String(value));
-  if (Number.isNaN(parsed.getTime())) {
-    throw ApiError.badRequest(`${field} must be a date in YYYY-MM-DD form`);
-  }
-  return parsed;
-}
 
 const REQUIRED = ['customerName', 'mobile', 'address', 'city', 'state', 'pincode', 'disease'] as const;
 
@@ -229,6 +225,13 @@ leadsRouter.patch(
         }
       }
 
+      // Setting the date has to schedule something. On its own it only wrote a column that
+      // the calendar and the lead's own follow-up list never read, so the date showed in the
+      // leads table and the task it implied existed nowhere.
+      if ('nextFollowUp' in body) {
+        await scheduleNextFollowUp(tx, actor, updated, toDateOrNull('nextFollowUp', body.nextFollowUp));
+      }
+
       await auditUpdate(tx, actor, 'leads', before, updated);
       return tx.lead.findUniqueOrThrow({ where: { id: updated.id }, include: WITH_CHILDREN });
     });
@@ -309,20 +312,30 @@ leadsRouter.post(
     const lead = await db.lead.findFirst({ where: { id: param(req, 'id'), deletedAt: null } });
     if (!lead) throw ApiError.notFound('Lead not found');
 
-    const followUp = await prisma.followUp.create({
-      data: {
-        leadId: lead.id,
-        customerId: lead.customerId,
-        customerName: lead.customerName,
-        scheduledAt: new Date(body.scheduledDate),
-        type: body.type ?? 'call',
-        status: 'pending',
-        notes: body.notes ?? null,
-        // Inherited from the lead rather than required in the payload.
-        assignedCallerId: lead.assignedCallerId,
-        createdBy: actor.userId,
-      },
+    const when = toDateOrNull('scheduledDate', body.scheduledDate);
+    if (!when) throw ApiError.badRequest('scheduledDate is required');
+
+    const followUp = await prisma.$transaction(async (tx) => {
+      const created = await tx.followUp.create({
+        data: {
+          leadId: lead.id,
+          customerId: lead.customerId,
+          customerName: lead.customerName,
+          scheduledAt: when,
+          type: body.type ?? 'call',
+          status: 'pending',
+          notes: body.notes ?? null,
+          // Inherited from the lead rather than required in the payload.
+          assignedCallerId: lead.assignedCallerId,
+          createdBy: actor.userId,
+        },
+      });
+      // The other half of the same problem: the lead's NEXT FOLLOW-UP column stayed empty
+      // while a follow-up sat scheduled against it.
+      await syncNextFollowUp(tx, lead.id);
+      return created;
     });
+
     res.status(201).json(serializeFollowUp(followUp));
   }),
 );
