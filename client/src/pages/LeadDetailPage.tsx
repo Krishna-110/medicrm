@@ -4,7 +4,8 @@ import { useApp } from '@/context/AppContext'
 import { leadsApi } from '@/api/leads'
 import { emitToast } from '@/lib/toast'
 import { formatIndianDate, formatIndianDateTime } from '@/lib/dateUtils'
-import type { LeadActivity, LeadStatus } from '@/types'
+import type { Lead, LeadActivity, LeadStatus, Order } from '@/types'
+import { ConvertLeadModal } from '@/components/ConvertLeadModal'
 import { Card, CardHeader, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -151,16 +152,14 @@ export function LeadDetailPage() {
     }
   }
 
-  async function handleConvertToOrder() {
-    if (!lead) return
-    try {
-      const { order, lead: updatedLead } = await leadsApi.convert(lead.id)
-      dispatch({ type: 'ADD_ORDER', payload: { order } })
-      dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
-      setShowConvertConfirm(false)
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to convert lead')
-    }
+  // Same dialog the leads list uses, so both routes into a conversion ask for the same
+  // things. They were separate confirmations before, and only one of them would have grown
+  // the payment and discount rules.
+  function handleConverted({ order, lead: updatedLead }: { order: Order; lead: Lead }) {
+    dispatch({ type: 'ADD_ORDER', payload: { order } })
+    dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
+    emitToast(`Converted to order ${order.orderNumber}`, 'success')
+    setShowConvertConfirm(false)
   }
 
   async function handleScheduleFollowUp() {
@@ -408,34 +407,6 @@ export function LeadDetailPage() {
             </CardBody>
           </Card>
 
-          {/* Convert to Order (inline confirmation) */}
-          {showConvertConfirm && lead.status !== 'converted' && (
-            <Card className="border-success-500">
-              <CardBody>
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-ink-900">Convert to Order?</h3>
-                    <p className="text-sm text-ink-500 mt-1">
-                      This will create a new order for {lead.customerName} and mark this lead as
-                      converted.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setShowConvertConfirm(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button variant="success" size="sm" onClick={handleConvertToOrder}>
-                      Confirm
-                    </Button>
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          )}
         </div>
 
         {/* Right Column - Timeline */}
@@ -485,6 +456,12 @@ export function LeadDetailPage() {
           </Card>
         </div>
       </div>
+
+      <ConvertLeadModal
+        lead={showConvertConfirm && lead.status !== 'converted' ? lead : null}
+        onClose={() => setShowConvertConfirm(false)}
+        onConverted={handleConverted}
+      />
     </div>
   )
 }

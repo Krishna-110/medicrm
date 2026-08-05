@@ -41,6 +41,18 @@ let other: Session;
 let uniq = 0;
 const nextId = () => `${Date.now()}${uniq++}`;
 
+/**
+ * A conversion payload. The screenshot is mandatory, so tests that are about something else
+ * still have to supply one — and tests asserting a different rejection must supply one too,
+ * or they would pass on the missing-screenshot 400 instead of the reason they mean to check.
+ */
+const convertPayload = (over: Record<string, unknown> = {}) => ({
+  paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
+  discountType: 'none',
+  discountValue: 0,
+  ...over,
+});
+
 const leadPayload = (over: Record<string, unknown> = {}) => ({
   customerName: `T Lead ${nextId()}`,
   mobile: '9000000001',
@@ -213,7 +225,7 @@ describe('lead lifecycle', () => {
       if (edit) {
         await as(admin).patch(`/api/leads/${lead.id}`, { medicines: [{ name: 'Atorva', days: 1 }] });
       }
-      const res = await as(admin).post(`/api/leads/${lead.id}/convert`);
+      const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
       return Number(res.body.order.totalAmount);
     };
 
@@ -222,12 +234,79 @@ describe('lead lifecycle', () => {
     expect(await price(true)).toBe(untouched);
   });
 
+  it('prices a lead whose medicine link was lost, by matching the name', async () => {
+    // Leads edited before the edit path learned to look up the catalogue have productId null
+    // on rows whose medicine is in the catalogue. Pricing those at zero would be wrong about
+    // data sitting right there, so the quote falls back to the name.
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await prisma.leadMedicine.updateMany({ where: { leadId: lead.id }, data: { productId: null } });
+
+    const preview = await as(admin).get(`/api/leads/${lead.id}/convert-preview`);
+    expect(preview.body.totalAmount).toBeGreaterThan(0);
+    expect(preview.body.items[0].inCatalogue).toBe(true);
+
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    expect(Number(res.body.order.totalAmount)).toBe(preview.body.totalAmount);
+  });
+
+  it('refuses to convert without a payment screenshot', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+
+    for (const missing of [{}, { paymentScreenshot: '' }, { paymentScreenshot: '   ' }]) {
+      const res = await as(admin).post(`/api/leads/${lead.id}/convert`, missing);
+      expect(res.status, JSON.stringify(missing)).toBe(400);
+      expect(String(res.body.error)).toMatch(/payment screenshot/i);
+    }
+
+    // Refused, not half-done: no order, and the lead is still open.
+    expect(await prisma.order.count({ where: { leadId: lead.id } })).toBe(0);
+    expect((await as(admin).get(`/api/leads/${lead.id}`)).body.status).not.toBe('converted');
+  });
+
+  it('applies a discount and records the order as paid', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const preview = await as(admin).get(`/api/leads/${lead.id}/convert-preview`);
+    expect(preview.status).toBe(200);
+    expect(preview.body.totalAmount).toBeGreaterThan(0);
+
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      discountType: 'percentage',
+      discountValue: 25,
+    }));
+    expect(res.status).toBe(200);
+    // The preview is what the user approved, so the order must bill exactly that.
+    expect(Number(res.body.order.totalAmount)).toBe(preview.body.totalAmount);
+    expect(Number(res.body.order.payableAmount)).toBe(preview.body.totalAmount * 0.75);
+    expect(res.body.order.paymentStatus).toBe('paid');
+  });
+
+  it('rejects a discount that is negative or over 100 percent', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+
+    for (const bad of [
+      { discountType: 'percentage', discountValue: 150 },
+      { discountType: 'flat', discountValue: -5 },
+    ]) {
+      const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload(bad));
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+    }
+    // Still convertible afterwards — a rejected attempt must not consume the lead.
+    expect((await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload())).status).toBe(200);
+  });
+
+  it('the preview refuses a lead the caller does not own', async () => {
+    // Same checks as the conversion, so an unauthorised lead fails when the dialog opens
+    // rather than after a screenshot has been uploaded.
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: other.userId }));
+    expect((await as(caller).get(`/api/leads/${lead.id}/convert-preview`)).status).toBe(404);
+  });
+
   it('converts to an order, deducting stock and closing the lead', async () => {
     const product = await prisma.product.findFirstOrThrow({ where: { brandName: 'Atorva' } });
     const stockBefore = product.stockQuantity;
 
     const lead = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
-    const res = await as(admin).post(`/api/leads/${lead.body.id}/convert`);
+    const res = await as(admin).post(`/api/leads/${lead.body.id}/convert`, convertPayload());
     expect(res.status).toBe(200);
     expect(res.body.order.orderNumber).toMatch(/^ORD-\d{4}-\d{4}$/);
     expect(res.body.order.medicines).toHaveLength(1);
@@ -237,7 +316,7 @@ describe('lead lifecycle', () => {
     expect(after.stockQuantity).toBe(stockBefore - 1);
 
     // A second conversion is refused rather than producing a duplicate order.
-    expect((await as(admin).post(`/api/leads/${lead.body.id}/convert`)).status).toBe(400);
+    expect((await as(admin).post(`/api/leads/${lead.body.id}/convert`, convertPayload())).status).toBe(400);
   });
 
   it('soft-deletes rather than destroying', async () => {
@@ -406,7 +485,7 @@ describe('stock and orders', () => {
 
   it('a discount recomputes the payable amount', async () => {
     const lead = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
-    const { body } = await as(admin).post(`/api/leads/${lead.body.id}/convert`);
+    const { body } = await as(admin).post(`/api/leads/${lead.body.id}/convert`, convertPayload());
     const total = body.order.totalAmount;
 
     const flat = await as(admin).patch(`/api/orders/${body.order.id}`, { discountType: 'flat', discountValue: 20 });

@@ -6,7 +6,8 @@ import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
 import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeOrder } from '../lib/serialize.js';
-import { convertLeadToOrder } from '../services/conversion.js';
+import { findCatalogueProductByName } from '../services/catalogue.js';
+import { convertLeadToOrder, previewConversion } from '../services/conversion.js';
 import {
   recountAssignedLeads,
   recordAssignment,
@@ -66,19 +67,7 @@ async function createLeadMedicine(
   leadId: string,
   m: { name: string; days?: number | string },
 ): Promise<void> {
-  // Best-effort catalogue match on an exact, case-insensitive name; a free-text medicine
-  // simply has no product behind it.
-  const product = await tx.product.findFirst({
-    where: {
-      isActive: true,
-      deletedAt: null,
-      OR: [
-        { brandName: { equals: m.name, mode: 'insensitive' } },
-        { genericName: { equals: m.name, mode: 'insensitive' } },
-      ],
-    },
-    select: { id: true },
-  });
+  const product = await findCatalogueProductByName(tx, m.name);
   await tx.leadMedicine.create({
     data: {
       leadId,
@@ -303,11 +292,42 @@ leadsRouter.post(
   }),
 );
 
+// What the conversion would produce, priced but not written. The confirmation dialog shows
+// this before asking for a payment screenshot.
+leadsRouter.get(
+  '/:id/convert-preview',
+  route(async (req, res) => {
+    const { lines, totalAmount } = await previewConversion(actorOf(req), param(req, 'id'));
+    res.json({
+      items: lines.map((l) => ({
+        name: l.name,
+        quantity: l.quantity,
+        unitPrice: Number(l.unitPrice),
+        lineTotal: Number(l.lineTotal),
+        // Flagged so the dialog can say why a line is priced at zero, rather than showing a
+        // free medicine and leaving the user to wonder.
+        inCatalogue: l.productId !== null,
+      })),
+      totalAmount: Number(totalAmount),
+    });
+  }),
+);
+
 leadsRouter.post(
   '/:id/convert',
   route(async (req, res) => {
     const actor = actorOf(req);
-    const order = await convertLeadToOrder(actor, param(req, 'id'), req.body?.unitPrice ?? 0);
+    const body = req.body ?? {};
+    const order = await convertLeadToOrder(
+      actor,
+      param(req, 'id'),
+      {
+        paymentScreenshot: body.paymentScreenshot,
+        discountType: body.discountType,
+        discountValue: body.discountValue,
+      },
+      body.unitPrice ?? 0,
+    );
     const lead = await scopedFor(actor).lead.findFirst({
       where: { id: param(req, 'id') },
       include: WITH_CHILDREN,

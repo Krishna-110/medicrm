@@ -6,10 +6,11 @@ import { medicinesApi } from '@/api/medicines'
 import { ApiError } from '@/api/client'
 import { emitToast } from '@/lib/toast'
 import { formatIndianDate } from '@/lib/dateUtils'
-import type { Lead, LeadStatus, LeadSource } from '@/types'
+import type { Lead, LeadStatus, LeadSource, Order } from '@/types'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { ConvertLeadModal } from '@/components/ConvertLeadModal'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -338,17 +339,13 @@ export function Leads() {
     }
   }
 
-  async function handleConvertToOrder() {
-    if (!convertingLead) return
-    try {
-      const { order, lead: updatedLead } = await leadsApi.convert(convertingLead.id)
-      dispatch({ type: 'ADD_ORDER', payload: { order } })
-      dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
-      emitToast(`Lead ${convertingLead.customerName} converted to order ${order.orderNumber}!`, 'success')
-      setConvertingLead(null)
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to convert lead')
-    }
+  // The dialog owns pricing, discount and the payment screenshot; this only records the
+  // result. Errors are reported there, next to the form that caused them.
+  function handleConverted({ order, lead: updatedLead }: { order: Order; lead: Lead }) {
+    dispatch({ type: 'ADD_ORDER', payload: { order } })
+    dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
+    emitToast(`Lead ${updatedLead.customerName} converted to order ${order.orderNumber}!`, 'success')
+    setConvertingLead(null)
   }
 
   function getCallerName(id?: string) {
@@ -789,27 +786,11 @@ export function Leads() {
         </form>
       </Modal>
 
-      {/* Convert to Order Confirmation Modal */}
-      <Modal
-        isOpen={!!convertingLead}
+      <ConvertLeadModal
+        lead={convertingLead}
         onClose={() => setConvertingLead(null)}
-        title="Convert Lead to Order"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-ink-600">
-            Are you sure you want to convert the lead for <span className="font-semibold text-ink-900">{convertingLead?.customerName}</span> into an order? This will create a new order, deduct stock, and update the lead status.
-          </p>
-          <div className="flex justify-end gap-3 pt-3 border-t border-ink-100">
-            <Button type="button" variant="secondary" onClick={() => setConvertingLead(null)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="success" onClick={handleConvertToOrder}>
-              Confirm Conversion
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onConverted={handleConverted}
+      />
     </div>
   )
 }
