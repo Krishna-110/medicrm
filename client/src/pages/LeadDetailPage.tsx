@@ -1,3 +1,4 @@
+import type { ConvertResponse } from '../../../server/src/lib/contract.js'
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useApp } from '@/context/AppContext'
@@ -99,7 +100,8 @@ export function LeadDetailPage() {
     return state.users.find(u => u.id === callerId)?.name ?? '-'
   }
 
-  function resolveActor(actor: string) {
+  function resolveActor(actor: string | null) {
+    if (!actor) return 'System'
     return state.users.find(u => u.id === actor)?.name ?? actor
   }
 
@@ -155,9 +157,14 @@ export function LeadDetailPage() {
   // Same dialog the leads list uses, so both routes into a conversion ask for the same
   // things. They were separate confirmations before, and only one of them would have grown
   // the payment and discount rules.
-  function handleConverted({ order, lead: updatedLead }: { order: Order; lead: Lead }) {
+  function handleConverted({ order, lead: updatedLead }: ConvertResponse) {
     dispatch({ type: 'ADD_ORDER', payload: { order } })
-    dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
+    // The lead is nullable — it is read back through the caller's own scope, so an admin
+    // converting someone else's lead gets the order and no lead. Dereferencing it blindly was
+    // the same mistake that broke Schedule Follow-up; the order is what matters here.
+    if (updatedLead) {
+      dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
+    }
     emitToast(`Converted to order ${order.orderNumber}`, 'success')
     setShowConvertConfirm(false)
   }

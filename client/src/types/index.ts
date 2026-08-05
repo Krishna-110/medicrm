@@ -1,4 +1,17 @@
-export type UserRole = 'admin' | 'caller';
+/**
+ * Entity shapes for the UI. The closed value sets below are re-exported from the server,
+ * which owns them — see server/src/lib/vocab.ts. They used to be declared here, so the
+ * narrowing was a hope rather than a fact.
+ */
+export type {
+  DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
+  LeadStatus, NotificationType, OrderStage, PaymentStatus, RenewalStatus, UserRole, UserStatus,
+} from '../../../server/src/lib/vocab.js';
+import type {
+  DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
+  LeadStatus, NotificationType, OrderStage, PaymentStatus, RenewalStatus, UserRole,
+} from '../../../server/src/lib/vocab.js';
+
 
 export type User = {
   id: string;
@@ -14,33 +27,17 @@ export type User = {
   password?: string;
 };
 
-export type LeadStatus =
-  | 'new'
-  | 'contacted'
-  | 'follow_up_pending'
-  | 'interested'
-  | 'call_back_later'
-  | 'no_response'
-  | 'not_interested'
-  | 'converted'
-  | 'sold';
 
-export type LeadSource =
-  | 'website'
-  | 'referral'
-  | 'walk_in'
-  | 'phone'
-  | 'social_media'
-  | 'advertisement'
-  | 'other';
 
 export type LeadActivity = {
   id: string;
   leadId: string;
-  type: 'call' | 'comment' | 'status_change' | 'follow_up' | 'assignment' | 'created';
+  type: LeadActivityType;
   description: string;
   createdAt: string;
-  createdBy: string;
+  // Nullable: seeded and system-generated activities have no author. This was declared as a
+  // plain string, which the server never guaranteed — the contract is what surfaced it.
+  createdBy: string | null;
 };
 
 export type LeadMedicineItem = {
@@ -72,7 +69,6 @@ export type Lead = {
   activities: LeadActivity[];
 };
 
-export type DosageForm = 'tablet' | 'capsule' | 'syrup' | 'injection' | 'other';
 
 export type Medicine = {
   id: string;
@@ -85,22 +81,13 @@ export type Medicine = {
   createdDate: string;
 };
 
-export type OrderStage =
-  | 'lead'
-  | 'confirmed'
-  | 'medicine_prepared'
-  | 'packed'
-  | 'shipped'
-  | 'delivered';
 
-export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded';
 
-export type DiscountType = 'none' | 'flat' | 'percentage';
 
 export type Order = {
   id: string;
   orderNumber: string;
-  leadId: string;
+  leadId: string | null;
   customerName: string;
   address: string;
   medicines: { name: string; quantity: number; price: number }[];
@@ -114,7 +101,6 @@ export type Order = {
   updatedDate: string;
 };
 
-export type RenewalStatus = 'upcoming' | 'due_today' | 'overdue' | 'renewed';
 
 export type Renewal = {
   id: string;

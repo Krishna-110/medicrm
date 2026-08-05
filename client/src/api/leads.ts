@@ -1,3 +1,4 @@
+import type { ActivityCreateResponse, ConvertResponse } from '../../../server/src/lib/contract.js';
 import { api } from './client';
 import type { Lead, LeadActivity, LeadMedicineItem, Order, FollowUp } from '@/types';
 
@@ -27,11 +28,11 @@ export const leadsApi = {
   update: (id: string, updates: Partial<Lead>) => api.patch<Lead>(`/leads/${id}`, updates),
   remove: (id: string) => api.delete<void>(`/leads/${id}`),
   addActivity: (id: string, description: string, medicine?: { name: string; days: number }) =>
-    api.post<{ activity: LeadActivity; medicine: LeadMedicineItem | null }>(`/leads/${id}/activities`, {
+    api.post<ActivityCreateResponse>(`/leads/${id}/activities`, {
       description,
       medicine,
     }),
   convertPreview: (id: string) => api.get<ConversionPreview>(`/leads/${id}/convert-preview`),
   convert: (id: string, payload: ConvertPayload) =>
-    api.post<{ order: Order; lead: Lead }>(`/leads/${id}/convert`, payload),
+    api.post<ConvertResponse>(`/leads/${id}/convert`, payload),
 };

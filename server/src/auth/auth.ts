@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { prisma } from '../db/prisma.js';
 import { ApiError } from '../lib/errors.js';
 import { serializeUser } from '../lib/serialize.js';
+import type { LoginResponse, MeResponse } from '../lib/contract.js';
 import type { Actor, ActorRole } from './scope.js';
 
 declare global {
@@ -88,7 +89,8 @@ export async function login(req: Request, res: Response) {
     prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
   ]);
 
-  res.json({ token, user: serializeUser(updated) });
+  const payload: LoginResponse = { token, user: serializeUser(updated) };
+  res.json(payload);
 }
 
 export async function logout(req: Request, res: Response) {
@@ -102,7 +104,8 @@ export async function me(req: Request, res: Response) {
   const actor = actorOf(req);
   const user = await prisma.user.findUnique({ where: { id: actor.userId } });
   if (!user) throw ApiError.notFound('User not found');
-  res.json({ user: serializeUser(user) });
+  const payload: MeResponse = { user: serializeUser(user) };
+  res.json(payload);
 }
 
 export async function changePassword(req: Request, res: Response) {

@@ -5,6 +5,7 @@ import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { serializeFollowUp, serializeLead } from '../lib/serialize.js';
 import { WITH_CHILDREN } from './leads.js';
+import type { FollowUpUpdateResponse } from '../lib/contract.js';
 import { syncNextFollowUp } from '../services/leads.js';
 
 export const followUpsRouter = Router();
@@ -65,6 +66,10 @@ followUpsRouter.patch(
       return { followUp: updated, lead: fresh };
     });
 
-    res.json({ followUp: serializeFollowUp(followUp), lead: lead ? serializeLead(lead) : null });
+    const payload: FollowUpUpdateResponse = {
+      followUp: serializeFollowUp(followUp),
+      lead: lead ? serializeLead(lead) : null,
+    };
+    res.json(payload);
   }),
 );

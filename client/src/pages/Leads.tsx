@@ -1,3 +1,4 @@
+import type { ConvertResponse } from '../../../server/src/lib/contract.js'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '@/context/AppContext'
@@ -341,10 +342,14 @@ export function Leads() {
 
   // The dialog owns pricing, discount and the payment screenshot; this only records the
   // result. Errors are reported there, next to the form that caused them.
-  function handleConverted({ order, lead: updatedLead }: { order: Order; lead: Lead }) {
+  function handleConverted({ order, lead: updatedLead }: ConvertResponse) {
     dispatch({ type: 'ADD_ORDER', payload: { order } })
-    dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
-    emitToast(`Lead ${updatedLead.customerName} converted to order ${order.orderNumber}!`, 'success')
+    // Nullable — see the same handler in LeadDetailPage. The order carries the customer name,
+    // so nothing here needs the lead to exist.
+    if (updatedLead) {
+      dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
+    }
+    emitToast(`Lead ${order.customerName} converted to order ${order.orderNumber}!`, 'success')
     setConvertingLead(null)
   }
 

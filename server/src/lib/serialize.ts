@@ -1,3 +1,7 @@
+import type {
+  DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
+  LeadStatus, NotificationType, OrderStage, PaymentStatus, UserRole, UserStatus,
+} from './vocab.js';
 import { Prisma } from '@prisma/client';
 import { APP_TIMEZONE, daysRemaining, renewalStatus } from './dates.js';
 
@@ -36,8 +40,8 @@ export const serializeUser = (u: User) => ({
   employeeId: u.employeeId,
   phone: u.phone,
   email: u.email,
-  role: u.role,
-  status: u.status,
+  role: u.role as UserRole,
+  status: u.status as UserStatus,
   assignedLeads: u.assignedLeadsCount,
   lastLogin: d10(u.lastLoginAt),
   avatar: u.avatarUrl ?? undefined,
@@ -57,7 +61,7 @@ type LeadActivity = {
 export const serializeLeadActivity = (a: LeadActivity) => ({
   id: a.id,
   leadId: a.leadId,
-  type: a.activityType,
+  type: a.activityType as LeadActivityType,
   description: a.description,
   createdAt: a.createdAt.toISOString(),
   createdBy: a.createdBy,
@@ -86,8 +90,8 @@ export const serializeLead = (l: Lead) => ({
   doctorName: l.doctorName ?? undefined,
   disease: l.disease ?? undefined,
   assignedCaller: l.assignedCallerId ?? undefined,
-  leadSource: l.leadSource,
-  status: l.status,
+  leadSource: l.leadSource as LeadSource,
+  status: l.status as LeadStatus,
   createdDate: d10(l.createdAt),
   lastFollowUp: d10(l.lastFollowUpAt),
   nextFollowUp: d10(l.nextFollowUpAt),
@@ -105,7 +109,7 @@ export const serializeMedicine = (p: Product) => ({
   id: p.id,
   name: p.brandName ?? p.genericName,
   genericName: p.genericName ?? undefined,
-  dosageForm: p.dosageForm ?? undefined,
+  dosageForm: (p.dosageForm ?? undefined) as DosageForm | undefined,
   unitPrice: num(p.unitPrice),
   stockQuantity: p.stockQuantity,
   isActive: p.isActive,
@@ -133,11 +137,11 @@ export const serializeOrder = (o: Order) => ({
   address: o.shippingAddress,
   medicines: (o.items ?? []).map(serializeOrderItem),
   totalAmount: num(o.totalAmount),
-  discountType: o.discountType,
+  discountType: o.discountType as DiscountType,
   discountValue: num(o.discountValue),
   payableAmount: num(o.payableAmount),
-  paymentStatus: o.paymentStatus,
-  stage: o.stage,
+  paymentStatus: o.paymentStatus as PaymentStatus,
+  stage: o.stage as OrderStage,
   createdDate: d10(o.createdAt),
   updatedDate: d10(o.updatedAt),
 });
@@ -173,8 +177,8 @@ export const serializeFollowUp = (f: FollowUp) => ({
   leadId: f.leadId ?? undefined,
   customerName: f.customerName,
   scheduledDate: d10(f.scheduledAt),
-  type: f.type,
-  status: f.status,
+  type: f.type as FollowUpType,
+  status: f.status as FollowUpStatus,
   notes: f.notes ?? undefined,
 });
 
@@ -185,7 +189,7 @@ export const serializeNotification = (n: Notification) => ({
   id: n.id,
   title: n.title,
   message: n.message,
-  type: n.type,
+  type: n.type as NotificationType,
   read: n.isRead,
   createdAt: n.createdAt.toISOString(),
 });

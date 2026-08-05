@@ -6,6 +6,7 @@ import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
 import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder } from '../lib/serialize.js';
+import type { ActivityCreateResponse, ConvertResponse } from '../lib/contract.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { convertLeadToOrder, previewConversion } from '../services/conversion.js';
 import {
@@ -297,10 +298,11 @@ leadsRouter.post(
       return { activity: created, medicine: added };
     });
 
-    res.status(201).json({
+    const payload: ActivityCreateResponse = {
       activity: serializeLeadActivity(activity),
       medicine: medicine ? serializeLeadMedicine(medicine) : null,
-    });
+    };
+    res.status(201).json(payload);
   }),
 );
 
@@ -344,7 +346,11 @@ leadsRouter.post(
       where: { id: param(req, 'id') },
       include: WITH_CHILDREN,
     });
-    res.json({ order: serializeOrder(order), lead: lead ? serializeLead(lead) : null });
+    const payload: ConvertResponse = {
+      order: serializeOrder(order),
+      lead: lead ? serializeLead(lead) : null,
+    };
+    res.json(payload);
   }),
 );
 
