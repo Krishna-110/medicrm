@@ -31,11 +31,22 @@ ordersRouter.patch(
     const id = param(req, 'id');
     const body = req.body ?? {};
 
-    // Editing an order is admin-only, and answers 404 rather than 403 for a caller. That is
-    // deliberate: the previous system enforced this with a row filter, so a caller's update
-    // simply matched nothing and the API said "not found". Changing it to 403 now would tell
-    // a caller that an order they cannot touch exists.
-    if (!isAdmin(actor)) throw ApiError.notFound('Order not found');
+    // Editing an order is admin-only, but which refusal depends on whether the caller can see
+    // it. A flat 404 was the old behaviour, inherited from a row filter that simply matched
+    // nothing — which meant a caller clicking their OWN order, visible on their own screen,
+    // was told it did not exist.
+    //
+    // An order inside their scope therefore gets 403 and a reason: they are already looking at
+    // it, so nothing is revealed. Anything else stays 404, since naming it would confirm an
+    // order exists to someone with no business knowing that.
+    if (!isAdmin(actor)) {
+      const visible = await scopedFor(actor).order.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!visible) throw ApiError.notFound('Order not found');
+      throw ApiError.forbidden("You don't have permission to update this order.");
+    }
 
     const before = await prisma.order.findFirst({ where: { id, deletedAt: null } });
     if (!before) throw ApiError.notFound('Order not found');

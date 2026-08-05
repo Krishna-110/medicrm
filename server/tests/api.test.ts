@@ -532,11 +532,6 @@ describe('authorization', () => {
     expect(after.notes).not.toBe('BREACH');
   });
 
-  it('PATCH /orders/:id is masked as 404 for a caller', async () => {
-    const order = await prisma.order.findFirstOrThrow({ where: { deletedAt: null } });
-    expect((await as(caller).patch(`/api/orders/${order.id}`, { stage: 'packed' })).status).toBe(404);
-  });
-
   it('a caller cannot assign a lead away from themselves', async () => {
     const own = await prisma.lead.findFirstOrThrow({ where: { deletedAt: null, assignedCallerId: caller.userId } });
     expect((await as(caller).patch(`/api/leads/${own.id}`, { assignedCaller: other.userId })).status).toBe(403);
@@ -552,6 +547,32 @@ describe('authorization', () => {
 });
 
 describe('stock and orders', () => {
+  it('a caller updating an order is told why for their own, and nothing for anyone else’s', async () => {
+    // The refusal used to be a flat 404, so a caller clicking an order visible on their own
+    // screen was told it did not exist. Explaining it is only safe for orders already in
+    // their scope — for the rest, 404 is what keeps the existence of an order private.
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const { body: converted } = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+
+    const own = await as(caller).patch(`/api/orders/${converted.order.id}`, { stage: 'packed' });
+    expect(own.status).toBe(403);
+    expect(own.body.error).toBe("You don't have permission to update this order.");
+
+    // Someone else's, and one that does not exist, must be indistinguishable.
+    const { body: foreignLead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: other.userId }));
+    const { body: foreign } = await as(admin).post(`/api/leads/${foreignLead.id}/convert`, convertPayload());
+
+    const notMine = await as(caller).patch(`/api/orders/${foreign.order.id}`, { stage: 'packed' });
+    const missing = await as(caller).patch('/api/orders/00000000-0000-0000-0000-000000000000', { stage: 'packed' });
+    expect(notMine.status).toBe(404);
+    expect(missing.status).toBe(404);
+    expect(notMine.body.error).toBe(missing.body.error);
+
+    // And the refusal actually refused.
+    const after = await as(admin).get('/api/orders');
+    expect(after.body.find((o: { id: string }) => o.id === converted.order.id).stage).not.toBe('packed');
+  });
+
   it('adds and sets stock, and refuses nonsense quantities', async () => {
     const created = await as(admin).post('/api/medicines', { name: `T Med ${nextId()}`, unitPrice: 10, stockQuantity: 5 });
     expect(created.status).toBe(201);
