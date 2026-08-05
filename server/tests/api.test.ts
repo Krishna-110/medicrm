@@ -390,6 +390,55 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(after.body.nextFollowUp).toBe('2026-10-05');
   });
 
+  it('converting creates one renewal per medicine, due when that medicine runs out', async () => {
+    // Nothing in the application created renewals — only the seed did — so the feature had no
+    // input at all and the page sat empty on any real database.
+    // Identified by what is new rather than by name: every lead here shares one mobile, so
+    // they all resolve to the same customer and customerName cannot tell them apart.
+    const before = new Set(
+      (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
+    );
+
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: caller.userId,
+      medicines: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
+    }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+
+    const mine = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+    expect(mine).toHaveLength(2);
+
+    // The shorter course falls due first — the date comes from the medicine, not a constant.
+    const byName = Object.fromEntries(mine.map((r: { medicineName: string }) => [r.medicineName, r]));
+    expect(byName['Sansamrit'].renewalDate < byName['Atorva'].renewalDate).toBe(true);
+  });
+
+  it('renewing opens the next cycle rather than ending the relationship', async () => {
+    // renew stamped renewedAt and stopped. The customer dropped off the list for good and
+    // nobody would ever be prompted to call them again — previousRenewalId had sat unused in
+    // the schema since the beginning for exactly this.
+    const before = new Set(
+      (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
+    );
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: caller.userId,
+      medicines: [{ name: 'Atorva', days: 30 }],
+    }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+
+    const [renewal] = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+    expect((await as(admin).post(`/api/renewals/${renewal.id}/renew`, {})).status).toBe(200);
+
+    const after = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+    expect(after).toHaveLength(2);
+    expect(after.filter((r: { status: string }) => r.status === 'renewed')).toHaveLength(1);
+    // The successor is live, so the customer stays in the follow-up cycle.
+    expect(after.filter((r: { status: string }) => r.status !== 'renewed')).toHaveLength(1);
+  });
+
   it('logging an activity returns { activity, medicine } and actually saves the medicine', async () => {
     // Same shape bug, third instance: this returned the activity alone while the client
     // destructured { activity, medicine }, and the medicine in the body was read and dropped.

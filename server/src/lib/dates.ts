@@ -72,3 +72,7 @@ export function periodBoundaries(now = new Date()) {
 
   return { today, tomorrow, weekStart, monthStart };
 }
+
+/** Same clock time, N days later. Used for renewal cycles. */
+export const addDays = (from: Date, days: number): Date =>
+  new Date(from.getTime() + days * 24 * 60 * 60 * 1000);

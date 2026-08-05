@@ -3,6 +3,7 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { ApiError } from '../lib/errors.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
+import { addDays } from '../lib/dates.js';
 import { isAdmin, type Actor } from '../auth/scope.js';
 import { findCatalogueProductByName } from './catalogue.js';
 import { lineTotal, nextOrderNumber, payableAmount } from './orders.js';
@@ -28,16 +29,29 @@ type LeadWithMedicines = {
   id: string;
   quantity: number | null;
   medicineRequired: string | null;
-  medicines: { productId: string | null; medicineName: string }[];
+  medicines: { productId: string | null; medicineName: string; days: number | null }[];
 };
 
-/** One priced line per medicine the lead asked for. */
+/** A lead medicine with no stated duration. One month is the usual course here. */
+const DEFAULT_SUPPLY_DAYS = 30;
+
+/**
+ * Days between a course running out and the renewal being written off.
+ *
+ * renewalDate is when the medicine runs out — the renewal shows as due from then. expiryDate
+ * is the end of the window to act, after which renewalStatus() calls it overdue. The gap is
+ * how long a caller has to chase it before it counts as lost.
+ */
+const RENEWAL_GRACE_DAYS = 7;
+
 export type QuoteLine = {
   productId: string | null;
   name: string;
   quantity: number;
   unitPrice: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
+  /** Days of supply, which is what decides when the renewal falls due. */
+  days: number;
 };
 
 /**
@@ -55,9 +69,19 @@ export async function quoteLead(
   // Falls back to the lead's single denormalised medicine when no rows exist — older leads
   // predate the lead_medicines table and must still be convertible.
   const requested = lead.medicines.length
-    ? lead.medicines.map((m) => ({ productId: m.productId, name: m.medicineName, quantity: 1 }))
+    ? lead.medicines.map((m) => ({
+        productId: m.productId,
+        name: m.medicineName,
+        quantity: 1,
+        days: m.days || DEFAULT_SUPPLY_DAYS,
+      }))
     : lead.medicineRequired
-      ? [{ productId: null, name: lead.medicineRequired, quantity: Math.max(lead.quantity ?? 1, 1) }]
+      ? [{
+          productId: null,
+          name: lead.medicineRequired,
+          quantity: Math.max(lead.quantity ?? 1, 1),
+          days: DEFAULT_SUPPLY_DAYS,
+        }]
       : [];
 
   if (requested.length === 0) {
@@ -84,6 +108,7 @@ export async function quoteLead(
       quantity: item.quantity,
       unitPrice,
       lineTotal: total_,
+      days: item.days,
     });
   }
   return { lines, totalAmount };
@@ -241,6 +266,27 @@ export async function convertLeadToOrder(
           });
         }
       }
+
+      // One renewal per medicine, due when that medicine runs out.
+      //
+      // Nothing in the application created these before — only the seed did — so the whole
+      // renewals feature had no input and sat empty on a real database. Conversion is where
+      // the facts are: the customer, the medicine, and how many days of it were sold.
+      await tx.renewal.create({
+        data: {
+          customerId,
+          customerName: customer.fullName,
+          orderId: order.id,
+          productId: line.productId,
+          medicineName: line.name,
+          orderDate: order.createdAt,
+          renewalDate: addDays(order.createdAt, line.days),
+          expiryDate: addDays(order.createdAt, line.days + RENEWAL_GRACE_DAYS),
+          // Follows the lead's owner, so it lands with whoever has the relationship.
+          assignedCallerId: lead.assignedCallerId,
+          createdBy: actor.userId,
+        },
+      });
     }
 
     const priced = await tx.order.update({

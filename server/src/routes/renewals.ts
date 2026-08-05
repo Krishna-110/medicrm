@@ -4,6 +4,7 @@ import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route } from '../lib/errors.js';
 import { serializeFollowUp, serializeRenewal } from '../lib/serialize.js';
+import { addDays, istDayDiff } from '../lib/dates.js';
 
 export const renewalsRouter = Router();
 
@@ -32,10 +33,40 @@ renewalsRouter.post(
     });
     if (!renewal) throw ApiError.notFound('Renewal not found');
 
-    const updated = await prisma.renewal.update({
-      where: { id },
-      data: { renewedAt: new Date() },
+    // Renewing closes this cycle and opens the next one. Stamping renewedAt alone ended the
+    // relationship: the customer dropped off the renewals list entirely and nobody would ever
+    // be prompted to call them again. previousRenewalId has been in the schema from the start
+    // for exactly this chain — nothing had ever written it.
+    const updated = await prisma.$transaction(async (tx) => {
+      const renewed = await tx.renewal.update({
+        where: { id },
+        data: { renewedAt: new Date() },
+      });
+
+      // The next cycle reuses this one's durations rather than a fixed constant, so a 15-day
+      // course stays a 15-day course and a 90-day one stays 90.
+      const supplyDays = Math.max(istDayDiff(renewed.renewalDate, renewed.orderDate), 1);
+      const graceDays = Math.max(istDayDiff(renewed.expiryDate, renewed.renewalDate), 1);
+      const from = renewed.renewedAt!;
+
+      await tx.renewal.create({
+        data: {
+          customerId: renewed.customerId,
+          customerName: renewed.customerName,
+          orderId: renewed.orderId,
+          productId: renewed.productId,
+          medicineName: renewed.medicineName,
+          orderDate: from,
+          renewalDate: addDays(from, supplyDays),
+          expiryDate: addDays(from, supplyDays + graceDays),
+          assignedCallerId: renewed.assignedCallerId,
+          previousRenewalId: renewed.id,
+          createdBy: actorOf(req).userId,
+        },
+      });
+      return renewed;
     });
+
     res.json(serializeRenewal(updated));
   }),
 );
