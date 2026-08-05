@@ -204,6 +204,24 @@ describe('lead lifecycle', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('prices a converted order the same whether or not the lead was edited', async () => {
+    // The edit path rebuilt lead_medicines without the catalogue lookup, so productId came
+    // back null. The name still displayed correctly, which is why it went unnoticed — but
+    // conversion reads the price from the product, so an edited lead converted at zero.
+    const price = async (edit: boolean) => {
+      const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+      if (edit) {
+        await as(admin).patch(`/api/leads/${lead.id}`, { medicines: [{ name: 'Atorva', days: 1 }] });
+      }
+      const res = await as(admin).post(`/api/leads/${lead.id}/convert`);
+      return Number(res.body.order.totalAmount);
+    };
+
+    const untouched = await price(false);
+    expect(untouched).toBeGreaterThan(0); // guards the comparison below from passing on 0 === 0
+    expect(await price(true)).toBe(untouched);
+  });
+
   it('converts to an order, deducting stock and closing the lead', async () => {
     const product = await prisma.product.findFirstOrThrow({ where: { brandName: 'Atorva' } });
     const stockBefore = product.stockQuantity;

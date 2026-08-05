@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { prisma } from '../db/prisma.js';
+import { prisma, type Tx } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
@@ -51,6 +51,43 @@ const EDITABLE = {
  * and so did clearing one.
  */
 const DATE_COLUMNS = new Set(['nextFollowUpAt', 'lastFollowUpAt']);
+
+/**
+ * Adds one medicine to a lead, linked to the catalogue where the name matches.
+ *
+ * Shared by create and edit because the edit path used to omit the lookup and store
+ * productId as null. That looked harmless — the name is what the form shows — but the
+ * product is where conversion reads the price from, so editing a lead's medicines silently
+ * repriced it to zero. A lead created and converted billed correctly; the same lead opened,
+ * saved and converted billed nothing.
+ */
+async function createLeadMedicine(
+  tx: Tx,
+  leadId: string,
+  m: { name: string; days?: number | string },
+): Promise<void> {
+  // Best-effort catalogue match on an exact, case-insensitive name; a free-text medicine
+  // simply has no product behind it.
+  const product = await tx.product.findFirst({
+    where: {
+      isActive: true,
+      deletedAt: null,
+      OR: [
+        { brandName: { equals: m.name, mode: 'insensitive' } },
+        { genericName: { equals: m.name, mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true },
+  });
+  await tx.leadMedicine.create({
+    data: {
+      leadId,
+      productId: product?.id ?? null,
+      medicineName: m.name,
+      days: Number(m.days) || 1,
+    },
+  });
+}
 
 const REQUIRED = ['customerName', 'mobile', 'address', 'city', 'state', 'pincode', 'disease'] as const;
 
@@ -124,27 +161,7 @@ leadsRouter.post(
       });
 
       for (const m of medicines) {
-        // Best-effort catalogue match on an exact, case-insensitive name; a free-text
-        // medicine simply has no product behind it.
-        const product = await tx.product.findFirst({
-          where: {
-            isActive: true,
-            deletedAt: null,
-            OR: [
-              { brandName: { equals: m.name, mode: 'insensitive' } },
-              { genericName: { equals: m.name, mode: 'insensitive' } },
-            ],
-          },
-          select: { id: true },
-        });
-        await tx.leadMedicine.create({
-          data: {
-            leadId: created.id,
-            productId: product?.id ?? null,
-            medicineName: m.name,
-            days: Number(m.days) || 1,
-          },
-        });
+        await createLeadMedicine(tx, created.id, m);
       }
 
       await tx.leadActivity.create({
@@ -219,9 +236,7 @@ leadsRouter.patch(
       if (Array.isArray(body.medicines)) {
         await tx.leadMedicine.deleteMany({ where: { leadId: updated.id } });
         for (const m of body.medicines as { name: string; days?: number }[]) {
-          await tx.leadMedicine.create({
-            data: { leadId: updated.id, medicineName: m.name, days: Number(m.days) || 1 },
-          });
+          await createLeadMedicine(tx, updated.id, m);
         }
       }
 
