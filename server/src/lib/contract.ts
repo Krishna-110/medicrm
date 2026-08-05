@@ -4,6 +4,7 @@ import type {
   serializeLeadActivity,
   serializeLeadMedicine,
   serializeOrder,
+  serializeRenewal,
   serializeUser,
 } from './serialize.js';
 
@@ -29,6 +30,7 @@ type Serialized<F extends (...args: never[]) => unknown> = ReturnType<F>;
 export type ApiUser = Serialized<typeof serializeUser>;
 export type ApiLead = Serialized<typeof serializeLead>;
 export type ApiOrder = Serialized<typeof serializeOrder>;
+export type ApiRenewal = Serialized<typeof serializeRenewal>;
 export type ApiFollowUp = Serialized<typeof serializeFollowUp>;
 export type ApiLeadActivity = Serialized<typeof serializeLeadActivity>;
 export type ApiLeadMedicine = Serialized<typeof serializeLeadMedicine>;
@@ -47,3 +49,6 @@ export type ActivityCreateResponse = { activity: ApiLeadActivity; medicine: ApiL
 
 /** POST /api/leads/:id/convert */
 export type ConvertResponse = { order: ApiOrder; lead: ApiLead | null };
+
+/** POST /api/renewals/:id/renew — renewing places a repeat order and opens the next cycle. */
+export type RenewResponse = { renewal: ApiRenewal; order: ApiOrder };

@@ -350,6 +350,10 @@ model Order {
   leadId          String?      @map("lead_id") @db.Uuid
   customerName    String       @map("customer_name")
   shippingAddress String       @map("shipping_address")
+  /// Proof of payment for THIS order. It previously lived only on the lead, which holds a
+  /// single screenshot however many orders that lead goes on to produce — so a renewal's
+  /// payment had nowhere to go except on top of the original sale's.
+  paymentScreenshot String?    @map("payment_screenshot")
   /// Sum of live line totals, recomputed by the order service.
   totalAmount     Decimal      @default(0) @map("total_amount") @db.Decimal(14, 2)
   discountType    DiscountType @default(none) @map("discount_type")

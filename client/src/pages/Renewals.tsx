@@ -4,9 +4,7 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle2,
-  Phone,
   RefreshCw,
-  Eye,
   CalendarPlus,
   XCircle,
 } from 'lucide-react'
@@ -22,7 +20,9 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { RenewalStatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { RenewOrderModal } from '@/components/RenewOrderModal'
 import type { Renewal, RenewalStatus } from '@/types'
+import type { RenewResponse } from '../../../server/src/lib/contract.js'
 
 function getDaysRemainingPill(days: number) {
   if (days < 0) return 'bg-danger-50 text-danger-700'
@@ -48,6 +48,7 @@ export function Renewals() {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [cancelingRenewal, setCancelingRenewal] = useState<Renewal | null>(null)
+  const [renewingRenewal, setRenewingRenewal] = useState<Renewal | null>(null)
 
   const renewals = state.renewals ?? []
 
@@ -89,13 +90,13 @@ export function Renewals() {
     { id: 'renewed', label: 'Renewed', count: statusCounts.renewed ?? 0 },
   ]
 
-  async function handleRenew(renewal: Renewal) {
-    try {
-      const updated = await renewalsApi.renew(renewal.id)
-      dispatch({ type: 'UPDATE_RENEWAL', payload: { id: updated.id, updates: updated } })
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to renew')
-    }
+  // Renewing now places a repeat order, so the store gets both: the closed cycle and the
+  // order it produced. The next cycle arrives on the following load rather than being
+  // synthesised here — the server decides its dates, and guessing them would invent a second
+  // source of truth for something already computed.
+  function handleRenewed({ renewal, order }: RenewResponse) {
+    dispatch({ type: 'UPDATE_RENEWAL', payload: { id: renewal.id, updates: renewal } })
+    dispatch({ type: 'ADD_ORDER', payload: { order } })
   }
 
   async function handleScheduleReminder(renewal: Renewal) {
@@ -217,14 +218,14 @@ export function Renewals() {
                         <RenewalStatusBadge status={renewal.status} />
                       </td>
                       <td className="px-3 py-3.5">
+                        {/*
+                         * Only actions that do something. "Call customer" and "View details"
+                         * were buttons with no onClick at all — they rendered, they hovered,
+                         * they did nothing. Renew and Cancel now hide once a cycle is renewed:
+                         * the server refuses both because renewedAt is set, so showing them was
+                         * an invitation to click and be told the renewal was not found.
+                         */}
                         <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            title="Call customer"
-                            className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
-                          >
-                            <Phone className="h-4 w-4" />
-                          </button>
                           <button
                             type="button"
                             title="Schedule reminder"
@@ -233,31 +234,26 @@ export function Renewals() {
                           >
                             <CalendarPlus className="h-4 w-4" />
                           </button>
-                          <button
-                            type="button"
-                            title="Renew order"
-                            onClick={() => handleRenew(renewal)}
-                            className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </button>
                           {renewal.status !== 'renewed' && (
-                            <button
-                              type="button"
-                              title="Stop / Cancel renewal"
-                              onClick={() => setCancelingRenewal(renewal)}
-                              className="rounded-lg p-1.5 text-danger-500 hover:bg-danger-50 hover:text-danger-600 transition-colors"
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                title="Renew order"
+                                onClick={() => setRenewingRenewal(renewal)}
+                                className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Stop / Cancel renewal"
+                                onClick={() => setCancelingRenewal(renewal)}
+                                className="rounded-lg p-1.5 text-danger-500 hover:bg-danger-50 hover:text-danger-600 transition-colors"
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </button>
+                            </>
                           )}
-                          <button
-                            type="button"
-                            title="View details"
-                            className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -270,6 +266,12 @@ export function Renewals() {
       </Card>
 
       {/* Stop / Cancel Renewal Confirmation Modal */}
+      <RenewOrderModal
+        renewal={renewingRenewal}
+        onClose={() => setRenewingRenewal(null)}
+        onRenewed={handleRenewed}
+      />
+
       <Modal
         isOpen={!!cancelingRenewal}
         onClose={() => setCancelingRenewal(null)}

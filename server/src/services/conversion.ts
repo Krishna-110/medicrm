@@ -219,9 +219,10 @@ export async function convertLeadToOrder(
     const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
 
     // ── 2. the order ─────────────────────────────────────────────────────────────────────
-    // The screenshot is kept on the lead, which is where the rest of the app already reads
-    // payment proof from and what the order links back to. It is required to get this far,
-    // so the order is paid by construction rather than by inspecting the lead's status.
+    // Kept on the order, which is what it is proof of, and on the lead, which is where the
+    // existing UI reads payment proof from. The lead holds only the most recent, so the
+    // order's copy is the one that stays true once a customer buys twice. Required to get
+    // this far, so the order is paid by construction rather than by inspecting the lead.
     await tx.lead.update({ where: { id: lead.id }, data: { paymentScreenshot: screenshot } });
 
     const order = await tx.order.create({
@@ -229,6 +230,7 @@ export async function convertLeadToOrder(
         orderNumber: await nextOrderNumber(tx),
         customerId,
         leadId: lead.id,
+        paymentScreenshot: screenshot,
         customerName: customer.fullName,
         shippingAddress: [lead.address, lead.city, lead.state, lead.pincode].filter(Boolean).join(', '),
         stage: 'confirmed',

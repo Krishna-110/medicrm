@@ -429,7 +429,19 @@ describe('follow-up scheduling stays in step with the lead', () => {
 
     const [renewal] = (await as(admin).get('/api/renewals')).body
       .filter((r: { id: string }) => !before.has(r.id));
-    expect((await as(admin).post(`/api/renewals/${renewal.id}/renew`, {})).status).toBe(200);
+    // Renewing is a sale now, so it carries the same preconditions as a conversion.
+    expect((await as(admin).post(`/api/renewals/${renewal.id}/renew`, {})).status).toBe(400);
+
+    const renewed = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
+      quantity: 2,
+      paymentScreenshot: 'data:image/png;base64,AAA',
+      discountType: 'flat',
+      discountValue: 100,
+    });
+    expect(renewed.status).toBe(200);
+    // It places the repeat order, priced from the quantity, not just a status flip.
+    expect(renewed.body.order.payableAmount).toBe(renewed.body.order.totalAmount - 100);
+    expect(renewed.body.renewal.status).toBe('renewed');
 
     const after = (await as(admin).get('/api/renewals')).body
       .filter((r: { id: string }) => !before.has(r.id));
