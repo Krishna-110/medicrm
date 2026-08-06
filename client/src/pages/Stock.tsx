@@ -10,7 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Plus, Edit2, Trash2, Package, PackagePlus } from 'lucide-react'
+import { Plus, Edit2, Trash2, Package } from 'lucide-react'
 
 const dosageFormOptions: { value: DosageForm; label: string }[] = [
   { value: 'tablet', label: 'Tablet' },
@@ -46,6 +46,8 @@ type MedicineForm = {
   dosageForm: DosageForm
   unitPrice: string
   openingStock: string
+  /** Units to add to stock, edited alongside the catalogue fields. Blank leaves stock alone. */
+  addStock: string
 }
 
 const emptyForm: MedicineForm = {
@@ -54,11 +56,7 @@ const emptyForm: MedicineForm = {
   dosageForm: 'tablet',
   unitPrice: '',
   openingStock: '0',
-}
-
-type StockAdjustForm = {
-  mode: 'add' | 'set'
-  quantity: string
+  addStock: '',
 }
 
 export function Stock() {
@@ -67,10 +65,6 @@ export function Stock() {
   const [showModal, setShowModal] = useState(false)
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null)
   const [form, setForm] = useState<MedicineForm>(emptyForm)
-
-  const [adjustingMedicine, setAdjustingMedicine] = useState<Medicine | null>(null)
-  const [stockForm, setStockForm] = useState<StockAdjustForm>({ mode: 'add', quantity: '' })
-  const [savingStock, setSavingStock] = useState(false)
 
   const filtered = state.medicines.filter(
     m =>
@@ -95,6 +89,7 @@ export function Stock() {
       dosageForm: medicine.dosageForm ?? 'tablet',
       unitPrice: String(medicine.unitPrice),
       openingStock: String(medicine.stockQuantity),
+      addStock: '',
     })
     setShowModal(true)
   }
@@ -107,9 +102,17 @@ export function Stock() {
       dosageForm: form.dosageForm,
       unitPrice: Number(form.unitPrice) || 0,
     }
+    // Adding stock is only ever an increment now — the "set exact amount" mode is gone. Blank
+    // leaves stock untouched.
+    const toAdd = Number(form.addStock)
+    if (form.addStock.trim() && (!Number.isInteger(toAdd) || toAdd <= 0)) {
+      emitToast('Units to add must be a whole number greater than 0')
+      return
+    }
     try {
       if (editingMedicine) {
-        const medicine = await medicinesApi.update(editingMedicine.id, updates)
+        let medicine = await medicinesApi.update(editingMedicine.id, updates)
+        if (toAdd > 0) medicine = await medicinesApi.adjustStock(editingMedicine.id, 'add', toAdd)
         dispatch({ type: 'UPDATE_MEDICINE', payload: { id: medicine.id, updates: medicine } })
       } else {
         const medicine = await medicinesApi.create({ ...updates, stockQuantity: Number(form.openingStock) || 0 })
@@ -136,39 +139,6 @@ export function Stock() {
       dispatch({ type: 'DELETE_MEDICINE', payload: { id } })
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to delete medicine')
-    }
-  }
-
-  function openAdjustStock(medicine: Medicine) {
-    setAdjustingMedicine(medicine)
-    setStockForm({ mode: 'add', quantity: '' })
-  }
-
-  async function handleAdjustStock(e: React.FormEvent) {
-    e.preventDefault()
-    if (!adjustingMedicine) return
-    const quantity = Number(stockForm.quantity)
-    if (!Number.isInteger(quantity) || (stockForm.mode === 'add' ? quantity <= 0 : quantity < 0)) {
-      emitToast(
-        stockForm.mode === 'add'
-          ? 'Enter a whole number greater than 0 to add'
-          : 'Enter a whole number of 0 or more',
-      )
-      return
-    }
-    setSavingStock(true)
-    try {
-      const medicine = await medicinesApi.adjustStock(adjustingMedicine.id, stockForm.mode, quantity)
-      dispatch({ type: 'UPDATE_MEDICINE', payload: { id: medicine.id, updates: medicine } })
-      emitToast(
-        stockForm.mode === 'add' ? `Added ${quantity} units to stock` : `Stock set to ${quantity} units`,
-        'success',
-      )
-      setAdjustingMedicine(null)
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to update stock')
-    } finally {
-      setSavingStock(false)
     }
   }
 
@@ -211,11 +181,9 @@ export function Stock() {
                   </td>
                   <td className="px-3 py-3 font-medium text-ink-900">{formatPrice(medicine.unitPrice)}</td>
                   <td className="px-3 py-3">
-                    <button onClick={() => openAdjustStock(medicine)} title="Adjust stock">
-                      <Badge variant={stockBadgeVariant(medicine.stockQuantity)} dot>
-                        {medicine.stockQuantity} units
-                      </Badge>
-                    </button>
+                    <Badge variant={stockBadgeVariant(medicine.stockQuantity)} dot>
+                      {medicine.stockQuantity} units
+                    </Badge>
                   </td>
                   <td className="px-3 py-3">
                     <button onClick={() => toggleStatus(medicine)} title="Toggle status">
@@ -226,7 +194,6 @@ export function Stock() {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openAdjustStock(medicine)} title="Adjust stock" className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-teal-50 hover:text-teal-600"><PackagePlus size={15} /></button>
                       <button onClick={() => openEdit(medicine)} title="Edit medicine" className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"><Edit2 size={15} /></button>
                       <button onClick={() => deleteMedicine(medicine.id)} title="Delete medicine" className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600"><Trash2 size={15} /></button>
                     </div>
@@ -284,59 +251,31 @@ export function Stock() {
               </div>
             )}
           </div>
+          {/*
+            * Stock lives here now, add-only: the standalone Adjust Stock dialog and its
+            * set-exact-amount mode are gone. Shows the current count, and a blank box to add
+            * to it — a restock is always "received N more", never "the number is now N".
+            */}
+          {editingMedicine && (
+            <div className="border-t border-ink-100 pt-4">
+              <label className="field-label" htmlFor="stock-add">
+                Add stock <span className="font-normal text-ink-400">· {editingMedicine.stockQuantity} in stock</span>
+              </label>
+              <input
+                id="stock-add"
+                type="number"
+                min={1}
+                step="1"
+                value={form.addStock}
+                onChange={e => setForm(f => ({ ...f, addStock: e.target.value }))}
+                className="field-input"
+                placeholder="Units received — leave blank to keep the current count"
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-3 border-t border-ink-100 pt-4">
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
             <Button type="submit">{editingMedicine ? 'Save Changes' : 'Add Medicine'}</Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={adjustingMedicine !== null}
-        onClose={() => setAdjustingMedicine(null)}
-        title="Adjust Stock"
-        description={adjustingMedicine ? `${adjustingMedicine.name} — currently ${adjustingMedicine.stockQuantity} units in stock.` : undefined}
-        size="sm"
-      >
-        <form onSubmit={handleAdjustStock} className="space-y-4">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStockForm(f => ({ ...f, mode: 'add' }))}
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                stockForm.mode === 'add' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
-              }`}
-            >
-              Add Stock
-            </button>
-            <button
-              type="button"
-              onClick={() => setStockForm(f => ({ ...f, mode: 'set' }))}
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                stockForm.mode === 'set' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
-              }`}
-            >
-              Set Exact Amount
-            </button>
-          </div>
-          <div>
-            <label className="field-label" htmlFor="stock-stockform-mode-add-units-to-add-new-stock-quantity">{stockForm.mode === 'add' ? 'Units to add' : 'New stock quantity'}</label>
-            <input
-              id="stock-stockform-mode-add-units-to-add-new-stock-quantity"
-              type="number"
-              min={stockForm.mode === 'add' ? 1 : 0}
-              step="1"
-              required
-              autoFocus
-              value={stockForm.quantity}
-              onChange={e => setStockForm(f => ({ ...f, quantity: e.target.value }))}
-              className="field-input"
-              placeholder={stockForm.mode === 'add' ? 'e.g. 50' : 'e.g. 120'}
-            />
-          </div>
-          <div className="flex justify-end gap-3 border-t border-ink-100 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setAdjustingMedicine(null)}>Cancel</Button>
-            <Button type="submit" loading={savingStock}>{stockForm.mode === 'add' ? 'Add' : 'Save'}</Button>
           </div>
         </form>
       </Modal>
