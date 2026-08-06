@@ -47,11 +47,14 @@ const RENEWAL_GRACE_DAYS = 7;
 export type QuoteLine = {
   productId: string | null;
   name: string;
+  /** Units, which equal the days of supply — one unit per day. */
   quantity: number;
   unitPrice: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
-  /** Days of supply, which is what decides when the renewal falls due. */
+  /** Days of supply; equal to quantity, and what decides when the renewal falls due. */
   days: number;
+  /** Units currently in the catalogue, or null when the medicine is not one. */
+  stock: number | null;
 };
 
 /**
@@ -66,22 +69,17 @@ export async function quoteLead(
   lead: LeadWithMedicines,
   fallbackUnitPrice: Prisma.Decimal | number = 0,
 ): Promise<{ lines: QuoteLine[]; totalAmount: Prisma.Decimal }> {
-  // Falls back to the lead's single denormalised medicine when no rows exist — older leads
-  // predate the lead_medicines table and must still be convertible.
+  // One unit per day of supply: days is the quantity. Twenty days is twenty units, billed at
+  // twenty times the unit price and taking twenty off stock. Falls back to the lead's single
+  // denormalised medicine when no rows exist — older leads predate lead_medicines and must
+  // still be convertible.
   const requested = lead.medicines.length
-    ? lead.medicines.map((m) => ({
-        productId: m.productId,
-        name: m.medicineName,
-        quantity: 1,
-        days: m.days || DEFAULT_SUPPLY_DAYS,
-      }))
+    ? lead.medicines.map((m) => {
+        const days = m.days || DEFAULT_SUPPLY_DAYS;
+        return { productId: m.productId, name: m.medicineName, days, quantity: days };
+      })
     : lead.medicineRequired
-      ? [{
-          productId: null,
-          name: lead.medicineRequired,
-          quantity: Math.max(lead.quantity ?? 1, 1),
-          days: DEFAULT_SUPPLY_DAYS,
-        }]
+      ? [{ productId: null, name: lead.medicineRequired, days: DEFAULT_SUPPLY_DAYS, quantity: DEFAULT_SUPPLY_DAYS }]
       : [];
 
   if (requested.length === 0) {
@@ -109,9 +107,24 @@ export async function quoteLead(
       unitPrice,
       lineTotal: total_,
       days: item.days,
+      // Null for a free-text medicine with no catalogue product — nothing to check against.
+      stock: product ? product.stockQuantity : null,
     });
   }
   return { lines, totalAmount };
+}
+
+/**
+ * Refuses a sale the catalogue cannot cover. Days are units, so a 20-day order needs 20 in
+ * stock; if it is not there the whole order is rejected and an admin has to restock first —
+ * they are the only role that can. Replaces the old "fulfil anyway and floor at zero".
+ */
+export function assertStockCovers(name: string, available: number, needed: number) {
+  if (available < needed) {
+    throw ApiError.badRequest(
+      `Not enough ${name} in stock — ${available} in stock, ${needed} needed. Ask an admin to update the stock.`,
+    );
+  }
 }
 
 /** The lead a conversion may proceed against, or the reason it may not. */
@@ -245,6 +258,12 @@ export async function convertLeadToOrder(
     // Priced by the same function that produced the preview the user just approved.
     const { lines, totalAmount } = await quoteLead(tx, lead, fallbackUnitPrice);
 
+    // Every catalogue line must be coverable before anything is written, so a shortfall
+    // rejects the whole order rather than half-filling it.
+    for (const line of lines) {
+      if (line.stock !== null) assertStockCovers(line.name, line.stock, line.quantity);
+    }
+
     for (const line of lines) {
       await tx.orderItem.create({
         data: {
@@ -257,8 +276,8 @@ export async function convertLeadToOrder(
         },
       });
 
-      // Stock floors at zero rather than blocking the sale. A pharmacy fulfils and restocks;
-      // it does not refuse a customer because a counter is stale.
+      // Deducts the units sold. Coverage was asserted above, so this cannot go negative; the
+      // Math.max is a belt-and-braces floor, not the policy it used to be.
       if (line.productId) {
         const product = await tx.product.findUnique({ where: { id: line.productId } });
         if (product) {

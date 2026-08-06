@@ -9,6 +9,10 @@ export type ConversionPreviewItem = {
   lineTotal: number
   /** False when no catalogue product matched the name, which is why the line is priced at 0. */
   inCatalogue: boolean
+  /** Units in stock, or null for a non-catalogue medicine. */
+  stock: number | null
+  /** Whether stock covers the days (quantity). A false here blocks the conversion. */
+  covered: boolean
 }
 
 export type ConversionPreview = {

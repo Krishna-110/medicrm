@@ -69,18 +69,22 @@ export function RenewOrderModal({
     .filter(m => m.isActive)
     .map(m => ({ id: m.id, label: m.name, sublabel: m.genericName }))
 
-  const priceOf = (name: string) =>
-    state.medicines.find(m => m.name.toLowerCase() === name.trim().toLowerCase())?.unitPrice ?? 0
+  const medicineOf = (name: string) =>
+    state.medicines.find(m => m.name.toLowerCase() === name.trim().toLowerCase())
 
   const lines = rows.map(r => {
     const days = Number(r.days)
-    const invalid = !r.name.trim() || !Number.isInteger(days) || days < 1
-    const unitPrice = priceOf(r.name)
-    // One unit per line, priced like a lead conversion; days is the supply period, not a
-    // price multiplier.
-    return { ...r, days, invalid, unitPrice, amount: invalid ? 0 : unitPrice }
+    const invalidDays = !r.name.trim() || !Number.isInteger(days) || days < 1
+    const med = medicineOf(r.name)
+    const unitPrice = med?.unitPrice ?? 0
+    // One unit per day of supply: days is the quantity, so the line bills days × unit price
+    // and needs `days` units in stock. A catalogue medicine without the stock blocks the sale.
+    const stock = med ? med.stockQuantity : null
+    const short = stock !== null && !invalidDays && stock < days
+    return { ...r, days, invalidDays, short, invalid: invalidDays || short, unitPrice, stock, amount: invalidDays ? 0 : unitPrice * days }
   })
-  const rowsInvalid = lines.some(l => l.invalid)
+  const rowsInvalid = lines.some(l => l.invalidDays)
+  const short = lines.filter(l => l.short)
   const total = lines.reduce((n, l) => n + l.amount, 0)
 
   const raw = Number(discountValue) || 0
@@ -93,7 +97,8 @@ export function RenewOrderModal({
     discountType !== 'none' && (raw < 0 || (discountType === 'percentage' && raw > 100))
 
   const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  const canSubmit = rows.length > 0 && !rowsInvalid && !discountInvalid && !!screenshot && !submitting
+  const canSubmit =
+    rows.length > 0 && !rowsInvalid && short.length === 0 && !discountInvalid && !!screenshot && !submitting
 
   const setRow = (id: string, patch: Partial<Row>) =>
     setRows(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r)))
@@ -196,6 +201,11 @@ export function RenewOrderModal({
                     {line.name} is not in the catalogue, so it has no price.
                   </p>
                 )}
+                {line.short && (
+                  <p className="w-full text-xs font-medium text-danger-600">
+                    Only {line.stock} of {line.name} in stock, {line.days} needed.
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -206,6 +216,11 @@ export function RenewOrderModal({
           >
             <Plus size={15} /> Add another medicine
           </button>
+          {short.length > 0 && (
+            <p className="mt-2 text-xs font-medium text-danger-600">
+              Not enough stock. Ask an admin to update it before renewing.
+            </p>
+          )}
         </div>
 
         <div className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 text-sm">

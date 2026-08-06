@@ -321,6 +321,10 @@ leadsRouter.get(
         // Flagged so the dialog can say why a line is priced at zero, rather than showing a
         // free medicine and leaving the user to wonder.
         inCatalogue: l.productId !== null,
+        // Stock, and whether it covers the days. Lets the dialog warn and block before the
+        // user uploads a screenshot, rather than only on the server's rejection.
+        stock: l.stock,
+        covered: l.stock === null || l.stock >= l.quantity,
       })),
       totalAmount: Number(totalAmount),
     });

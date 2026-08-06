@@ -6,6 +6,7 @@ import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
+import { assertStockCovers } from '../services/conversion.js';
 import { lineTotal, nextOrderNumber, payableAmount } from '../services/orders.js';
 import { auditCreate } from '../services/audit.js';
 import { addDays, istDayDiff } from '../lib/dates.js';
@@ -49,16 +50,20 @@ renewalsRouter.post(
       ? rawItems
       : [{ name: renewal.medicineName }]) as { name?: unknown; days?: unknown }[];
 
+    // Blank days fall back to the length of the cycle being renewed.
+    const defaultDays = Math.max(istDayDiff(renewal.renewalDate, renewal.orderDate), 1);
+
     const lines = items.map((item) => {
       const name = String(item?.name ?? '').trim();
-      // Days of supply — 0 means "not given, reuse the previous cycle". It decides when the
-      // medicine runs out and its next renewal falls due; it is not a price multiplier.
-      const days = item?.days == null ? 0 : Number(item.days);
+      // Days of supply, and — one unit per day — the quantity too: a 20-day reorder is 20
+      // units, priced and stock-deducted as such. 0 means "not given, use the current cycle".
+      const rawDays = item?.days == null ? 0 : Number(item.days);
       if (!name) throw ApiError.badRequest('Every line needs a medicine');
-      if (days !== 0 && (!Number.isInteger(days) || days < 1)) {
+      if (rawDays !== 0 && (!Number.isInteger(rawDays) || rawDays < 1)) {
         throw ApiError.badRequest(`Days for ${name} must be a whole number of 1 or more`);
       }
-      return { name, quantity: 1, days };
+      const days = rawDays || defaultDays;
+      return { name, quantity: days, days };
     });
     const screenshot = String(req.body?.paymentScreenshot ?? '').trim();
     if (!screenshot) {
@@ -102,6 +107,12 @@ renewalsRouter.post(
         priced.push({ ...line, product, unitPrice, amount });
       }
 
+      // Every catalogue line must be coverable before anything is written — same rule as a
+      // conversion, so a shortfall rejects the whole reorder rather than half-filling it.
+      for (const line of priced) {
+        if (line.product) assertStockCovers(line.name, line.product.stockQuantity, line.quantity);
+      }
+
       const created = await tx.order.create({
         data: {
           orderNumber: await nextOrderNumber(tx),
@@ -137,7 +148,7 @@ renewalsRouter.post(
           },
         });
 
-        // Same rule as conversion: fulfil and restock, never refuse a sale over a stale count.
+        // Deducts the units sold; coverage was asserted above so this cannot go negative.
         if (line.product) {
           await tx.product.update({
             where: { id: line.product.id },

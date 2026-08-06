@@ -73,7 +73,10 @@ export function ConvertLeadModal({
   // still have no unit price set, which bills exactly as badly as one that is missing.
   const unpriced = preview?.items.filter(i => i.lineTotal === 0) ?? []
   const notListed = unpriced.filter(i => !i.inCatalogue)
-  const canSubmit = !!preview && !!screenshot && !discountInvalid && !submitting
+  // Days are units, so a line the catalogue can't cover blocks the sale — the server refuses
+  // it too, but catching it here means the user isn't asked for a screenshot first.
+  const short = preview?.items.filter(i => !i.covered) ?? []
+  const canSubmit = !!preview && !!screenshot && !discountInvalid && short.length === 0 && !submitting
 
   async function handleConfirm() {
     if (!lead || !canSubmit) return
@@ -121,11 +124,25 @@ export function ConvertLeadModal({
                     {item.quantity} × {money(item.unitPrice)}
                     {!item.inCatalogue && ' · not in catalogue'}
                   </p>
+                  {!item.covered && (
+                    <p className="text-xs font-medium text-danger-600">
+                      Only {item.stock} in stock, {item.quantity} needed
+                    </p>
+                  )}
                 </div>
                 <span className="shrink-0 text-sm font-medium text-ink-800">{money(item.lineTotal)}</span>
               </div>
             ))}
           </div>
+          {short.length > 0 && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-danger-600">
+              <AlertTriangle size={14} className="mt-px shrink-0" />
+              <span>
+                Not enough stock to fulfil{' '}
+                {short.map(i => i.name).join(', ')}. Ask an admin to update the stock before converting.
+              </span>
+            </p>
+          )}
           {unpriced.length > 0 && (
             <p className="mt-2 flex items-start gap-1.5 text-xs text-warning-700">
               <AlertTriangle size={14} className="mt-px shrink-0" />
