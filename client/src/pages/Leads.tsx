@@ -270,24 +270,35 @@ export function Leads() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (await saveLead()) setShowModal(false)
+  }
+
+  /**
+   * Saves the form and hands back the lead.
+   *
+   * Split out so Convert can act on what is on screen rather than the last saved copy — a
+   * screenshot just pasted into the form would otherwise be ignored by the conversion that
+   * happens a second later. Returns null when validation stopped it or the request failed.
+   */
+  async function saveLead(): Promise<Lead | null> {
 
     const medicines = form.medicines
       .filter(row => row.name.trim())
       .map(row => ({ id: row.id, name: row.name.trim(), days: Number(row.days) || 1 }))
-    if (!editingLead && medicines.length === 0) return
+    if (!editingLead && medicines.length === 0) return null
 
     if (editingLead && form.status === 'sold') {
       if (!form.address.trim()) {
         emitToast('Customer Address is required when Lead Status is Sold')
-        return
+        return null
       }
       if (!form.pincode.trim()) {
         emitToast('Pincode is required when Lead Status is Sold')
-        return
+        return null
       }
       if (!form.paymentScreenshot.trim()) {
         emitToast('Payment Screenshot is required when Lead Status is Sold')
-        return
+        return null
       }
     }
 
@@ -321,14 +332,23 @@ export function Leads() {
       if (editingLead) {
         const lead = await leadsApi.update(editingLead.id, payload)
         dispatch({ type: 'UPDATE_LEAD', payload: { id: lead.id, updates: lead } })
-      } else {
-        const lead = await leadsApi.create(payload)
-        dispatch({ type: 'ADD_LEAD', payload: { lead } })
+        return lead
       }
-      setShowModal(false)
+      const lead = await leadsApi.create(payload)
+      dispatch({ type: 'ADD_LEAD', payload: { lead } })
+      return lead
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to save lead')
+      return null
     }
+  }
+
+  /** Save first, then convert, so the dialog opens on the lead the user is looking at. */
+  async function handleSaveAndConvert() {
+    const lead = await saveLead()
+    if (!lead) return
+    setShowModal(false)
+    setConvertingLead(lead)
   }
 
   async function deleteLead(id: string) {
@@ -782,10 +802,26 @@ export function Leads() {
             </>
           )}
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-ink-200">
+          <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-ink-200">
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
+            {/*
+             * Converting from inside the form, so the payment screenshot and address already on
+             * screen carry into the dialog instead of being asked for a second time. Saves
+             * first: an unsaved edit would otherwise be dropped by a conversion happening a
+             * moment later. Hidden once converted — that transition only goes one way.
+             */}
+            {editingLead && editingLead.status !== 'converted' && (
+              <Button
+                type="button"
+                variant="success"
+                icon={<ShoppingCart size={15} />}
+                onClick={handleSaveAndConvert}
+              >
+                Save &amp; Convert
+              </Button>
+            )}
             <Button type="submit">{editingLead ? 'Update' : 'Add'} Lead</Button>
           </div>
         </form>

@@ -37,13 +37,17 @@ export function ConvertLeadModal({
   const [submitting, setSubmitting] = useState(false)
 
   // Reset per lead, so a discount typed for one is never carried into the next.
+  //
+  // The screenshot is the exception: a lead marked sold already carries proof of payment, and
+  // asking for the same image twice is asking the user to find it again for no reason. It
+  // prefills, and stays replaceable.
   useEffect(() => {
     if (!lead) return
     setPreview(null)
     setLoadError(null)
     setDiscountType('none')
     setDiscountValue('')
-    setScreenshot('')
+    setScreenshot(lead.paymentScreenshot ?? '')
 
     let cancelled = false
     leadsApi
