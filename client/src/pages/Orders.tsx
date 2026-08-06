@@ -456,6 +456,12 @@ export function Orders() {
             {/* Stage Stepper */}
             <div>
               <p className="mb-4 text-xs uppercase tracking-wide text-ink-500">Order Progress</p>
+              {/*
+               * Six labelled steps do not fit a phone — the w-16 labels alone are wider than
+               * the modal, which is what let the whole dialog pan sideways. So the labels are
+               * desktop-only; on mobile the circles fit on their own and the current step is
+               * named once, below.
+               */}
               <div className="flex items-start">
                 {STAGES.map((stage, i) => {
                   const currentIdx = STAGE_ORDER.indexOf(selectedOrder.stage)
@@ -477,7 +483,7 @@ export function Orders() {
                           {isCompleted || (isCurrent && isLast) ? <Check className="h-4 w-4" /> : i + 1}
                         </div>
                         <p
-                          className={`mt-1.5 w-16 text-center text-[10px] leading-tight ${
+                          className={`mt-1.5 hidden w-16 text-center text-[10px] leading-tight sm:block ${
                             isCurrent ? 'font-bold text-primary-700' : reached ? 'text-primary-600' : 'text-ink-400'
                           }`}
                         >
@@ -485,18 +491,61 @@ export function Orders() {
                         </p>
                       </div>
                       {!isLast && (
-                        <div className={`mx-1 mb-6 h-0.5 flex-1 rounded-full ${i < currentIdx ? 'bg-primary-500' : 'bg-ink-200'}`} />
+                        <div className={`mx-1 h-0.5 flex-1 rounded-full sm:mb-6 ${i < currentIdx ? 'bg-primary-500' : 'bg-ink-200'}`} />
                       )}
                     </div>
                   )
                 })}
               </div>
+              <p className="mt-3 text-center text-sm font-semibold text-primary-700 sm:hidden">
+                {STAGES.find((s) => s.key === selectedOrder.stage)?.label ?? selectedOrder.stage}
+              </p>
             </div>
 
-            {/* Medicines Table */}
+            {/* Medicines */}
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-ink-500">Medicines</p>
-              <div className="overflow-x-auto rounded-xl border border-ink-200">
+
+              {/*
+               * Cards on a phone, table on desktop. A four-column table on 375px forced the
+               * name to scroll out of view — "Sansamrit" read as "samrit". A card gives the
+               * name a full line and puts qty × price beside the subtotal, no sideways scroll.
+               */}
+              <div className="space-y-2 sm:hidden">
+                {selectedOrder.medicines.map((med, i) => (
+                  <div key={i} className="flex items-start justify-between gap-3 rounded-xl border border-ink-200 p-3">
+                    <div className="min-w-0">
+                      <p className="break-words font-medium text-ink-900">{med.name}</p>
+                      <p className="mt-0.5 text-xs text-ink-500">
+                        {med.quantity} × {formatIndianCurrency(med.price)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 font-semibold text-ink-900">
+                      {formatIndianCurrency(med.quantity * med.price)}
+                    </p>
+                  </div>
+                ))}
+                <div className="space-y-1.5 rounded-xl border border-ink-200 bg-ink-50/50 p-3 text-sm">
+                  <div className="flex justify-between text-ink-600">
+                    <span>Subtotal</span>
+                    <span className="font-medium text-ink-800">{formatIndianCurrency(selectedOrder.totalAmount)}</span>
+                  </div>
+                  {selectedOrder.discountType !== 'none' && (
+                    <div className="flex justify-between text-danger-600">
+                      <span>
+                        Discount ({selectedOrder.discountType === 'percentage' ? `${selectedOrder.discountValue}%` : formatIndianCurrency(selectedOrder.discountValue)})
+                      </span>
+                      <span>-{formatIndianCurrency(selectedOrder.totalAmount - selectedOrder.payableAmount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-ink-200 pt-1.5 font-bold text-ink-900">
+                    <span>Payable Total</span>
+                    <span>{formatIndianCurrency(selectedOrder.payableAmount)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden overflow-x-auto rounded-xl border border-ink-200 sm:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-ink-100 bg-ink-50/50">
