@@ -471,15 +471,6 @@ export function Leads() {
                       >
                         <Edit2 size={15} />
                       </button>
-                      {lead.status !== 'converted' && (
-                        <button
-                          onClick={() => setConvertingLead(lead)}
-                          className="rounded-lg p-1.5 text-success-600 hover:bg-success-50 hover:text-success-700 transition-colors"
-                          title="Convert to Order"
-                        >
-                          <ShoppingCart size={15} />
-                        </button>
-                      )}
                       <button
                         onClick={() => deleteLead(lead.id)}
                         className="rounded-lg p-1.5 text-ink-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
