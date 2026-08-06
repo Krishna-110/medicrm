@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Upload } from 'lucide-react'
+import { Plus, Trash2, Upload } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
 import { renewalsApi } from '@/api/renewals'
 import { emitToast } from '@/lib/toast'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import type { DiscountType, Renewal } from '@/types'
 import type { RenewResponse } from '../../../server/src/lib/contract.js'
 
@@ -16,6 +17,8 @@ import type { RenewResponse } from '../../../server/src/lib/contract.js'
  * lives here because it is the one thing that genuinely varies between cycles — a customer
  * reordering three months at once is the normal case this had no way to express.
  */
+type Row = { id: string; name: string; quantity: string }
+
 export function RenewOrderModal({
   renewal,
   onClose,
@@ -26,33 +29,42 @@ export function RenewOrderModal({
   onRenewed: (result: RenewResponse) => void
 }) {
   const { state } = useApp()
-  const [quantity, setQuantity] = useState('1')
+  const [rows, setRows] = useState<Row[]>([])
   const [discountType, setDiscountType] = useState<DiscountType>('none')
   const [discountValue, setDiscountValue] = useState('')
   const [screenshot, setScreenshot] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // Reset per renewal, so a quantity typed for one is never carried into the next.
+  // Reset per renewal, so lines typed for one are never carried into the next. The renewal's
+  // own medicine is the starting point; everything else is added deliberately.
   useEffect(() => {
-    setQuantity('1')
+    setRows(renewal ? [{ id: crypto.randomUUID(), name: renewal.medicineName, quantity: '1' }] : [])
     setDiscountType('none')
     setDiscountValue('')
     setScreenshot('')
     setSubmitting(false)
-  }, [renewal?.id])
+  }, [renewal?.id, renewal?.medicineName])
 
   if (!renewal) return null
 
   // Priced from the catalogue already in memory rather than a preview round-trip. The server
-  // prices it again from the same products when it writes the order, so this is a display
-  // figure, never the billed one.
-  const product = state.medicines.find(
-    m => m.name.toLowerCase() === renewal.medicineName.toLowerCase(),
-  )
-  const unitPrice = product?.unitPrice ?? 0
-  const qty = Number(quantity)
-  const qtyInvalid = !Number.isInteger(qty) || qty < 1
-  const total = qtyInvalid ? 0 : unitPrice * qty
+  // prices it again from the same products when it writes the order, so these are display
+  // figures, never the billed ones.
+  const medicineOptions = state.medicines
+    .filter(m => m.isActive)
+    .map(m => ({ id: m.id, label: m.name, sublabel: m.genericName }))
+
+  const priceOf = (name: string) =>
+    state.medicines.find(m => m.name.toLowerCase() === name.trim().toLowerCase())?.unitPrice ?? 0
+
+  const lines = rows.map(r => {
+    const qty = Number(r.quantity)
+    const invalid = !r.name.trim() || !Number.isInteger(qty) || qty < 1
+    const unitPrice = priceOf(r.name)
+    return { ...r, qty, invalid, unitPrice, amount: invalid ? 0 : unitPrice * qty }
+  })
+  const rowsInvalid = lines.some(l => l.invalid)
+  const total = lines.reduce((n, l) => n + l.amount, 0)
 
   const raw = Number(discountValue) || 0
   const discountAmount =
@@ -64,14 +76,17 @@ export function RenewOrderModal({
     discountType !== 'none' && (raw < 0 || (discountType === 'percentage' && raw > 100))
 
   const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  const canSubmit = !qtyInvalid && !discountInvalid && !!screenshot && !submitting
+  const canSubmit = rows.length > 0 && !rowsInvalid && !discountInvalid && !!screenshot && !submitting
+
+  const setRow = (id: string, patch: Partial<Row>) =>
+    setRows(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r)))
 
   async function handleConfirm() {
     if (!renewal || !canSubmit) return
     setSubmitting(true)
     try {
       const result = await renewalsApi.renew(renewal.id, {
-        quantity: qty,
+        items: lines.map(l => ({ name: l.name.trim(), quantity: l.qty })),
         paymentScreenshot: screenshot,
         discountType,
         discountValue: raw,
@@ -95,25 +110,68 @@ export function RenewOrderModal({
         </p>
 
         <div>
-          <label className="field-label" htmlFor="renew-quantity">Quantity</label>
-          <input
-            id="renew-quantity"
-            type="number"
-            min={1}
-            value={quantity}
-            onChange={e => setQuantity(e.target.value)}
-            className="field-input"
-          />
-          {qtyInvalid && (
-            <p className="mt-1.5 text-xs text-danger-600">Enter a whole number of 1 or more.</p>
-          )}
+          <span className="field-label" id="renew-items-label">Order</span>
+          <div className="space-y-2" role="group" aria-labelledby="renew-items-label">
+            {lines.map((line, idx) => (
+              <div key={line.id} className="flex flex-wrap items-start gap-2">
+                {/* Same picker the lead form uses, so an added medicine links to the catalogue
+                    by the same name match the server will apply. */}
+                <div className="w-full min-w-0 sm:flex-1">
+                  <SearchableSelect
+                    value={line.name}
+                    onChange={name => setRow(line.id, { name })}
+                    options={medicineOptions}
+                    placeholder="Search medicines..."
+                    ariaLabel={`Medicine ${idx + 1}`}
+                    emptyText="No medicines found"
+                  />
+                </div>
+                <div className="flex w-full items-start gap-2 sm:w-auto">
+                  <div className="flex-1 sm:w-20 sm:flex-none">
+                    <input
+                      type="number"
+                      min={1}
+                      value={line.quantity}
+                      onChange={e => setRow(line.id, { quantity: e.target.value })}
+                      aria-label={`Quantity for medicine ${idx + 1}`}
+                      className="field-input"
+                    />
+                  </div>
+                  <span className="w-24 pt-2 text-right text-sm tabular-nums text-ink-600">
+                    {money(line.amount)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRows(rs => rs.filter(r => r.id !== line.id))}
+                    disabled={rows.length === 1}
+                    title="Remove line"
+                    aria-label={`Remove medicine ${idx + 1}`}
+                    className="mt-0.5 shrink-0 rounded-lg p-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30 sm:p-2"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                {line.name.trim() && line.unitPrice === 0 && (
+                  // Says why rather than showing a free medicine and leaving the user to wonder.
+                  <p className="w-full text-xs text-warning-700">
+                    {line.name} is not in the catalogue, so it has no price.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', quantity: '1' }])}
+            className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
+          >
+            <Plus size={15} /> Add another medicine
+          </button>
         </div>
 
         <div className="rounded-xl border border-ink-100 bg-ink-50/40 p-3 text-sm">
           <div className="flex justify-between text-ink-600">
-            <span>
-              {money(unitPrice)} × {qtyInvalid ? '—' : qty}
-            </span>
+            <span>Subtotal</span>
             <span>{money(total)}</span>
           </div>
           {discountAmount > 0 && (
@@ -126,12 +184,6 @@ export function RenewOrderModal({
             <span>Payable</span>
             <span>{money(payable)}</span>
           </div>
-          {!product && (
-            // Says why rather than showing a free medicine and leaving the user to wonder.
-            <p className="mt-2 text-xs text-warning-700">
-              {renewal.medicineName} is not in the catalogue, so it has no price.
-            </p>
-          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

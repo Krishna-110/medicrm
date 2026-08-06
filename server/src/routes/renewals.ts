@@ -37,12 +37,26 @@ renewalsRouter.post(
     });
     if (!renewal) throw ApiError.notFound('Renewal not found');
 
-    // Renewing is a sale, so it carries the same preconditions as converting a lead: a
-    // quantity, proof of payment, and a discount that makes sense.
-    const quantity = Number(req.body?.quantity ?? 1);
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      throw ApiError.badRequest('Quantity must be a whole number of 1 or more');
-    }
+    // Renewing is a sale, so it carries the same preconditions as converting a lead: what is
+    // being bought, proof of payment, and a discount that makes sense.
+    //
+    // Lines rather than a single quantity: a renewal is raised per medicine, but the reorder
+    // it triggers is a conversation — the customer wants two months of this and may as well
+    // add that. Defaults to the renewal's own medicine when the client sends nothing.
+    const rawItems: unknown = req.body?.items;
+    const items = (Array.isArray(rawItems) && rawItems.length ? rawItems : [
+      { name: renewal.medicineName, quantity: Number(req.body?.quantity ?? 1) },
+    ]) as { name?: unknown; quantity?: unknown }[];
+
+    const lines = items.map((item) => {
+      const name = String(item?.name ?? '').trim();
+      const quantity = Number(item?.quantity ?? 1);
+      if (!name) throw ApiError.badRequest('Every line needs a medicine');
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        throw ApiError.badRequest(`Quantity for ${name} must be a whole number of 1 or more`);
+      }
+      return { name, quantity };
+    });
     const screenshot = String(req.body?.paymentScreenshot ?? '').trim();
     if (!screenshot) {
       throw ApiError.badRequest('A payment screenshot is required to renew');
@@ -68,12 +82,22 @@ renewalsRouter.post(
       const previousOrder = renewed.orderId
         ? await tx.order.findUnique({ where: { id: renewed.orderId }, select: { leadId: true } })
         : null;
-      const product = renewed.productId
-        ? await tx.product.findUnique({ where: { id: renewed.productId } })
-        : await findCatalogueProductByName(tx, renewed.medicineName);
+      // Priced before the order is written, so totalAmount is right on insert rather than
+      // patched afterwards. The renewal's own medicine uses its stored product link; anything
+      // added in the dialog is matched by name, exactly as the lead form does.
+      const priced = [];
+      let total = new Prisma.Decimal(0);
+      for (const line of lines) {
+        const product =
+          renewed.productId && line.name.toLowerCase() === renewed.medicineName.toLowerCase()
+            ? await tx.product.findUnique({ where: { id: renewed.productId } })
+            : await findCatalogueProductByName(tx, line.name);
 
-      const unitPrice = product?.unitPrice ?? new Prisma.Decimal(0);
-      const total = lineTotal(quantity, unitPrice);
+        const unitPrice = product?.unitPrice ?? new Prisma.Decimal(0);
+        const amount = lineTotal(line.quantity, unitPrice);
+        total = total.add(amount);
+        priced.push({ ...line, product, unitPrice, amount });
+      }
 
       const created = await tx.order.create({
         data: {
@@ -98,23 +122,25 @@ renewalsRouter.post(
         },
       });
 
-      await tx.orderItem.create({
-        data: {
-          orderId: created.id,
-          productId: product?.id ?? null,
-          medicineNameSnapshot: renewed.medicineName,
-          quantity,
-          unitPriceSnapshot: unitPrice,
-          lineTotal: total,
-        },
-      });
-
-      // Same rule as conversion: fulfil and restock, never refuse the sale over a stale count.
-      if (product) {
-        await tx.product.update({
-          where: { id: product.id },
-          data: { stockQuantity: Math.max(product.stockQuantity - quantity, 0) },
+      for (const line of priced) {
+        await tx.orderItem.create({
+          data: {
+            orderId: created.id,
+            productId: line.product?.id ?? null,
+            medicineNameSnapshot: line.name,
+            quantity: line.quantity,
+            unitPriceSnapshot: line.unitPrice,
+            lineTotal: line.amount,
+          },
         });
+
+        // Same rule as conversion: fulfil and restock, never refuse a sale over a stale count.
+        if (line.product) {
+          await tx.product.update({
+            where: { id: line.product.id },
+            data: { stockQuantity: Math.max(line.product.stockQuantity - line.quantity, 0) },
+          });
+        }
       }
       await auditCreate(tx, actorOf(req), 'orders', created);
 
@@ -141,7 +167,14 @@ renewalsRouter.post(
           createdBy: actorOf(req).userId,
         },
       });
-      return { renewal: renewed, order: created };
+      // Re-read with its lines. serializeOrder builds `medicines` from them, so returning the
+      // bare created row would have handed the client an order with nothing in it — and the
+      // Orders page would show an empty one until the next reload.
+      const withItems = await tx.order.findUniqueOrThrow({
+        where: { id: created.id },
+        include: { items: { orderBy: { createdAt: 'asc' } } },
+      });
+      return { renewal: renewed, order: withItems };
     });
 
     res.json({ renewal: serializeRenewal(updated), order: serializeOrder(order) });

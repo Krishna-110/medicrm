@@ -451,6 +451,59 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(after.filter((r: { status: string }) => r.status !== 'renewed')).toHaveLength(1);
   });
 
+  it('the reorder is editable — extra medicines and quantities reach the order', async () => {
+    // A renewal is raised per medicine, but the reorder it triggers is a conversation: the
+    // customer wants two months of this, and may as well add that. Sending only a quantity
+    // could not express it.
+    const before = new Set(
+      (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
+    );
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: caller.userId,
+      medicines: [{ name: 'Atorva', days: 30 }],
+    }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+
+    const renewed = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
+      items: [
+        { name: 'Atorva', quantity: 2 },
+        { name: 'Sansamrit', quantity: 3 },
+      ],
+      paymentScreenshot: 'data:image/png;base64,AAA',
+    });
+    expect(renewed.status).toBe(200);
+
+    const lines = renewed.body.order.medicines;
+    expect(lines).toHaveLength(2);
+    expect(Object.fromEntries(lines.map((m: { name: string; quantity: number }) => [m.name, m.quantity])))
+      .toEqual({ Atorva: 2, Sansamrit: 3 });
+    // Totalled across both lines, not just the renewal's own medicine.
+    const expected = lines.reduce((n: number, m: { price: number; quantity: number }) => n + m.price * m.quantity, 0);
+    expect(renewed.body.order.totalAmount).toBe(expected);
+  });
+
+  it('refuses a reorder line with a nonsense quantity', async () => {
+    const before = new Set(
+      (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
+    );
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+
+    const res = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
+      items: [{ name: 'Atorva', quantity: 0 }],
+      paymentScreenshot: 'data:image/png;base64,AAA',
+    });
+    expect(res.status).toBe(400);
+    // Refused whole: the renewal is still open, so nothing was half-applied.
+    const stillOpen = (await as(admin).get('/api/renewals')).body
+      .find((r: { id: string }) => r.id === renewal.id);
+    expect(stillOpen.status).not.toBe('renewed');
+  });
+
   it('logging an activity returns { activity, medicine } and actually saves the medicine', async () => {
     // Same shape bug, third instance: this returned the activity alone while the client
     // destructured { activity, medicine }, and the medicine in the body was read and dropped.

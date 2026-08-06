@@ -1,7 +1,7 @@
 import type { RenewResponse } from '../../../server/src/lib/contract.js';
 
 type RenewPayload = {
-  quantity: number;
+  items: { name: string; quantity: number }[];
   paymentScreenshot: string;
   discountType: 'none' | 'flat' | 'percentage';
   discountValue: number;

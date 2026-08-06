@@ -11,6 +11,9 @@ export default defineConfig({
     },
   },
   server: {
+    // Binds to every interface, so a phone on the same Wi-Fi can reach the dev server at
+    // http://<this-machine's-LAN-IP>:5173 without a tunnel in between.
+    host: true,
     // Lets the ngrok tunnel (a random *.ngrok-free.app / *.ngrok.io host each run) through
     // Vite's Host-header check, which otherwise rejects any host it doesn't recognize.
     allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app', '.ngrok.io', '.ngrok.app'],
