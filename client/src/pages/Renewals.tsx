@@ -20,6 +20,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { RenewalStatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { DateInput } from '@/components/ui/DateInput'
 import { RenewOrderModal } from '@/components/RenewOrderModal'
 import type { Renewal, RenewalStatus } from '@/types'
 import type { RenewResponse } from '../../../server/src/lib/contract.js'
@@ -302,12 +303,10 @@ export function Renewals() {
           </p>
           <div>
             <label className="field-label" htmlFor="reminder-date">Remind on</label>
-            <input
+            <DateInput
               id="reminder-date"
-              type="date"
               value={reminderDate}
-              onChange={e => setReminderDate(e.target.value)}
-              className="field-input"
+              onChange={setReminderDate}
             />
             <p className="mt-1.5 text-xs text-ink-400">
               Defaults to the renewal date. Setting a reminder again moves this one rather than

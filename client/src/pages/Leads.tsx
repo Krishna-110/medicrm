@@ -14,6 +14,7 @@ import { Modal } from '@/components/ui/Modal'
 import { ConvertLeadModal } from '@/components/ConvertLeadModal'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { DateInput } from '@/components/ui/DateInput'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Tabs } from '@/components/ui/Tabs'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -751,12 +752,10 @@ export function Leads() {
                 </div>
                 <div>
                   <label className="field-label" htmlFor="leads-next-follow-up">Next Follow-up</label>
-                  <input
+                  <DateInput
                     id="leads-next-follow-up"
-                    type="date"
                     value={form.nextFollowUp}
-                    onChange={e => setForm(f => ({ ...f, nextFollowUp: e.target.value }))}
-                    className="field-input"
+                    onChange={value => setForm(f => ({ ...f, nextFollowUp: value }))}
                   />
                 </div>
               </div>
