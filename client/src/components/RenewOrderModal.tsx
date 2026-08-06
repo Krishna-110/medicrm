@@ -130,10 +130,17 @@ export function RenewOrderModal({
           <span className="field-label" id="renew-items-label">Order</span>
           <div className="space-y-2" role="group" aria-labelledby="renew-items-label">
             {lines.map((line, idx) => (
-              <div key={line.id} className="flex flex-wrap items-start gap-2">
-                {/* Same picker the lead form uses, so an added medicine links to the catalogue
-                    by the same name match the server will apply. */}
+              <div key={line.id} className="flex flex-wrap items-end gap-2">
+                {/*
+                 * Medicine and Days both carry a label so their inputs sit on the same line —
+                 * without one, the labelled Days box dropped below the label-less picker. The
+                 * row bottom-aligns, so the price and remove control line up with the inputs.
+                 *
+                 * Days, not quantity: a reorder is sold by supply duration, the same model as a
+                 * lead. The price is the medicine's, once, regardless of days.
+                 */}
                 <div className="w-full min-w-0 sm:flex-1">
+                  <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Medicine</label>
                   <SearchableSelect
                     value={line.name}
                     onChange={name => setRow(line.id, { name })}
@@ -144,12 +151,15 @@ export function RenewOrderModal({
                   />
                 </div>
                 {/*
-                 * Days, not quantity. A reorder is sold by supply duration — how long the
-                 * medicine lasts, which sets when the next renewal falls due — the same model
-                 * as a lead. The price is the medicine's, once, regardless of days.
+                 * Each trailing column carries a label — a real one for Days, an invisible
+                 * spacer for the price and the remove button — so every control starts on the
+                 * same line under an equal-height label. The price and remove button reuse the
+                 * field-input box (transparent) so their height matches the input at every
+                 * breakpoint; the input is taller on phones, which a fixed padding could not
+                 * have tracked.
                  */}
-                <div className="flex w-full items-end gap-2 sm:w-auto">
-                  <div className="flex-1 sm:w-20 sm:flex-none">
+                <div className="flex w-full items-stretch gap-2 sm:w-auto">
+                  <div className="flex flex-1 flex-col sm:w-20 sm:flex-none sm:grow-0">
                     <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Days</label>
                     <input
                       type="number"
@@ -160,19 +170,25 @@ export function RenewOrderModal({
                       className="field-input"
                     />
                   </div>
-                  <span className="w-24 pb-2 text-right text-sm tabular-nums text-ink-600">
-                    {money(line.amount)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setRows(rs => rs.filter(r => r.id !== line.id))}
-                    disabled={rows.length === 1}
-                    title="Remove line"
-                    aria-label={`Remove medicine ${idx + 1}`}
-                    className="mb-0.5 shrink-0 rounded-lg p-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30 sm:p-2"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex w-24 flex-col">
+                    <span aria-hidden className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-transparent">₹</span>
+                    <div className="flex flex-1 items-center justify-end text-sm tabular-nums text-ink-600">
+                      {money(line.amount)}
+                    </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <span aria-hidden className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-transparent">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setRows(rs => rs.filter(r => r.id !== line.id))}
+                      disabled={rows.length === 1}
+                      title="Remove line"
+                      aria-label={`Remove medicine ${idx + 1}`}
+                      className="flex flex-1 items-center justify-center rounded-lg px-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
                 {line.name.trim() && line.unitPrice === 0 && (
                   // Says why rather than showing a free medicine and leaving the user to wonder.
