@@ -49,6 +49,8 @@ export function Renewals() {
   const [activeTab, setActiveTab] = useState('all')
   const [cancelingRenewal, setCancelingRenewal] = useState<Renewal | null>(null)
   const [renewingRenewal, setRenewingRenewal] = useState<Renewal | null>(null)
+  const [remindingRenewal, setRemindingRenewal] = useState<Renewal | null>(null)
+  const [reminderDate, setReminderDate] = useState('')
 
   const renewals = state.renewals ?? []
 
@@ -99,13 +101,31 @@ export function Renewals() {
     dispatch({ type: 'ADD_ORDER', payload: { order } })
   }
 
-  async function handleScheduleReminder(renewal: Renewal) {
+  function openReminder(renewal: Renewal) {
+    setRemindingRenewal(renewal)
+    // Defaults to the day the medicine runs out — the day the call is worth making. The
+    // button used to schedule for today regardless, which for a renewal three weeks out put
+    // a task on the caller's list three weeks early.
+    setReminderDate(renewal.renewalDate)
+  }
+
+  async function handleScheduleReminder() {
+    if (!remindingRenewal || !reminderDate) return
     try {
-      const followUp = await renewalsApi.remind(renewal.id, {
-        notes: `Renewal reminder call for ${renewal.medicineName}`,
+      const followUp = await renewalsApi.remind(remindingRenewal.id, {
+        scheduledDate: reminderDate,
+        notes: `Renewal reminder call for ${remindingRenewal.medicineName}`,
       })
-      dispatch({ type: 'ADD_FOLLOW_UP', payload: { followUp } })
-      emitToast(`Reminder scheduled for ${renewal.customerName}`, 'success')
+      // The server moves an existing pending reminder rather than stacking a second one, so
+      // this may be an update. ADD_FOLLOW_UP prepends unconditionally, so dispatching both
+      // would duplicate it in the store — the same bug, one layer up.
+      dispatch(
+        (state.followUps ?? []).some(f => f.id === followUp.id)
+          ? { type: 'UPDATE_FOLLOW_UP', payload: { id: followUp.id, updates: followUp } }
+          : { type: 'ADD_FOLLOW_UP', payload: { followUp } },
+      )
+      emitToast(`Reminder set for ${remindingRenewal.customerName}`, 'success')
+      setRemindingRenewal(null)
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to schedule reminder')
     }
@@ -225,7 +245,7 @@ export function Renewals() {
                           <button
                             type="button"
                             title="Schedule reminder"
-                            onClick={() => handleScheduleReminder(renewal)}
+                            onClick={() => openReminder(renewal)}
                             className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
                           >
                             <CalendarPlus className="h-4 w-4" />
@@ -267,6 +287,43 @@ export function Renewals() {
         onClose={() => setRenewingRenewal(null)}
         onRenewed={handleRenewed}
       />
+
+      <Modal
+        isOpen={!!remindingRenewal}
+        onClose={() => setRemindingRenewal(null)}
+        title="Schedule reminder"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-ink-600">
+            A call to{' '}
+            <span className="font-semibold text-ink-900">{remindingRenewal?.customerName}</span> about{' '}
+            <span className="font-semibold text-ink-900">{remindingRenewal?.medicineName}</span>.
+          </p>
+          <div>
+            <label className="field-label" htmlFor="reminder-date">Remind on</label>
+            <input
+              id="reminder-date"
+              type="date"
+              value={reminderDate}
+              onChange={e => setReminderDate(e.target.value)}
+              className="field-input"
+            />
+            <p className="mt-1.5 text-xs text-ink-400">
+              Defaults to the renewal date. Setting a reminder again moves this one rather than
+              adding a second.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 border-t border-ink-100 pt-3">
+            <Button type="button" variant="secondary" onClick={() => setRemindingRenewal(null)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" disabled={!reminderDate} onClick={handleScheduleReminder}>
+              Set reminder
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={!!cancelingRenewal}

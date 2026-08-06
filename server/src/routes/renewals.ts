@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
-import { ApiError, param, route } from '../lib/errors.js';
+import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { lineTotal, nextOrderNumber, payableAmount } from '../services/orders.js';
@@ -191,21 +191,42 @@ renewalsRouter.post(
     const renewal = await db.renewal.findFirst({ where: { id, deletedAt: null } });
     if (!renewal) throw ApiError.notFound('Renewal not found');
 
-    const followUp = await prisma.followUp.create({
-      data: {
-        customerId: renewal.customerId,
-        customerName: renewal.customerName,
-        renewalId: renewal.id,
-        scheduledAt: new Date(),
-        type: 'reminder',
-        status: 'pending',
-        notes: req.body?.notes ?? null,
-        // Inherited from the renewal, so the reminder lands with whoever owns it.
-        assignedCallerId: renewal.assignedCallerId,
-        createdBy: actor.userId,
-      },
+    // Defaults to the day the medicine runs out, which is when the call is actually worth
+    // making. It used to hardcode now(), so a renewal due in three weeks put a task on the
+    // caller's list today — "schedule" that could not schedule.
+    const when = toDateOrNull('scheduledDate', req.body?.scheduledDate) ?? renewal.renewalDate;
+    const notes = req.body?.notes ?? null;
+
+    // One pending reminder per renewal, moved rather than stacked. The button had no guard,
+    // so pressing it twice — easy on a phone — left two identical tasks to be completed
+    // separately. Same rule the lead's follow-up date already follows.
+    const existing = await prisma.followUp.findFirst({
+      where: { renewalId: renewal.id, status: 'pending', deletedAt: null },
+      orderBy: { scheduledAt: 'asc' },
+      select: { id: true },
     });
-    res.status(201).json(serializeFollowUp(followUp));
+
+    const followUp = existing
+      ? await prisma.followUp.update({
+          where: { id: existing.id },
+          data: { scheduledAt: when, notes },
+        })
+      : await prisma.followUp.create({
+          data: {
+            customerId: renewal.customerId,
+            customerName: renewal.customerName,
+            renewalId: renewal.id,
+            scheduledAt: when,
+            type: 'reminder',
+            status: 'pending',
+            notes,
+            // Inherited from the renewal, so the reminder lands with whoever owns it.
+            assignedCallerId: renewal.assignedCallerId,
+            createdBy: actor.userId,
+          },
+        });
+
+    res.status(existing ? 200 : 201).json(serializeFollowUp(followUp));
   }),
 );
 

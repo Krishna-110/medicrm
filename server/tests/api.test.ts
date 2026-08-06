@@ -484,6 +484,36 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(renewed.body.order.totalAmount).toBe(expected);
   });
 
+  it('a reminder defaults to the renewal date, and pressing again moves it', async () => {
+    // It used to hardcode now(), so a renewal three weeks out put a task on the caller's list
+    // today — and it had no guard, so pressing twice left two identical tasks to complete
+    // separately.
+    const before = new Set(
+      (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
+    );
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+
+    const countReminders = async () =>
+      (await as(admin).get('/api/follow-ups')).body
+        .filter((f: { type: string; customerName: string }) => f.type === 'reminder').length;
+
+    const start = await countReminders();
+    const first = await as(admin).post(`/api/renewals/${renewal.id}/remind`, {});
+    expect(first.status).toBe(201);
+    expect(first.body.scheduledDate).toBe(renewal.renewalDate);
+    expect(await countReminders()).toBe(start + 1);
+
+    // Same task moved, not a second one raised.
+    const again = await as(admin).post(`/api/renewals/${renewal.id}/remind`, { scheduledDate: '2026-12-24' });
+    expect(again.status).toBe(200);
+    expect(again.body.id).toBe(first.body.id);
+    expect(again.body.scheduledDate).toBe('2026-12-24');
+    expect(await countReminders()).toBe(start + 1);
+  });
+
   it('refuses a reorder line with a nonsense quantity', async () => {
     const before = new Set(
       (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
