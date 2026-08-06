@@ -173,7 +173,6 @@ export function Renewals() {
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Medicine</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Order Date</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Renewal Date</th>
-                <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Expiry Date</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Days Left</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Caller</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Status</th>
@@ -202,9 +201,6 @@ export function Renewals() {
                       </td>
                       <td className="px-3 py-3.5 whitespace-nowrap text-xs text-ink-500">
                         {formatIndianDate(renewal.renewalDate)}
-                      </td>
-                      <td className="px-3 py-3.5 whitespace-nowrap text-xs text-ink-500">
-                        {formatIndianDate(renewal.expiryDate)}
                       </td>
                       <td className="px-3 py-3.5">
                         <span
