@@ -127,7 +127,8 @@ type Order = {
   id: string; orderNumber: string; leadId: string | null; customerName: string;
   shippingAddress: string; totalAmount: Prisma.Decimal; discountType: string;
   discountValue: Prisma.Decimal; payableAmount: Prisma.Decimal; paymentStatus: string;
-  stage: string; createdAt: Date; updatedAt: Date; items?: OrderItem[];
+  stage: string; paymentScreenshot: string | null;
+  createdAt: Date; updatedAt: Date; items?: OrderItem[];
 };
 export const serializeOrder = (o: Order) => ({
   id: o.id,
@@ -141,6 +142,9 @@ export const serializeOrder = (o: Order) => ({
   discountValue: num(o.discountValue),
   payableAmount: num(o.payableAmount),
   paymentStatus: o.paymentStatus as PaymentStatus,
+  // Proof of payment for this order. It was stored and never exposed, so every renewal
+  // demanded a screenshot that nobody could then look at.
+  paymentScreenshot: o.paymentScreenshot ?? undefined,
   stage: o.stage as OrderStage,
   createdDate: d10(o.createdAt),
   updatedDate: d10(o.updatedAt),
@@ -150,6 +154,7 @@ type Renewal = {
   id: string; customerId: string; customerName: string; medicineName: string;
   orderDate: Date; renewalDate: Date; expiryDate: Date;
   assignedCallerId: string | null; renewedAt: Date | null;
+  orderId: string | null; previousRenewalId: string | null;
 };
 /**
  * `daysRemaining` and `status` are derived, not stored — see lib/dates.ts. Storing them
@@ -165,6 +170,11 @@ export const serializeRenewal = (r: Renewal) => ({
   expiryDate: d10(r.expiryDate),
   daysRemaining: daysRemaining(r.expiryDate),
   assignedCaller: r.assignedCallerId ?? undefined,
+  // The order this cycle belongs to, and whether it descends from an earlier one. Together
+  // they are what lets a payment be traced back to the renewal that produced it: an order
+  // whose renewal has a predecessor was a reorder, not a first sale.
+  orderId: r.orderId ?? undefined,
+  previousRenewalId: r.previousRenewalId ?? undefined,
   status: renewalStatus(r.renewalDate, r.expiryDate, r.renewedAt),
 });
 

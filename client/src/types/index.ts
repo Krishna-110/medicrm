@@ -96,6 +96,7 @@ export type Order = {
   discountValue: number;
   payableAmount: number;
   paymentStatus: PaymentStatus;
+  paymentScreenshot?: string;
   stage: OrderStage;
   createdDate: string;
   updatedDate: string;
@@ -113,6 +114,8 @@ export type Renewal = {
   daysRemaining: number;
   assignedCaller?: string;
   status: RenewalStatus;
+  orderId?: string;
+  previousRenewalId?: string;
 };
 
 export type FollowUp = {

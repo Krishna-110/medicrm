@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Package,
   Eye,
@@ -68,6 +69,7 @@ function getNextStage(current: OrderStage): OrderStage | null {
 
 export function Orders() {
   const { state, dispatch } = useApp()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
@@ -77,6 +79,16 @@ export function Orders() {
 
   const orders = state.orders ?? []
 
+  /**
+   * The renewal an order came from, if any.
+   *
+   * Derived rather than stored: renewing writes the next cycle pointing at the order it just
+   * placed, so an order whose renewal has a predecessor was a reorder. A first sale gets a
+   * renewal too, but that one has no predecessor.
+   */
+  const sourceRenewal = (order: Order) =>
+    (state.renewals ?? []).find(r => r.orderId === order.id && !!r.previousRenewalId)
+
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = { all: orders.length }
     for (const stage of STAGE_ORDER) {
@@ -85,9 +97,26 @@ export function Orders() {
     return counts
   }, [orders])
 
+  /**
+   * Payment history: every order that has been paid, newest first.
+   *
+   * Reads from orders rather than a payments table, because an order currently holds exactly
+   * one payment. If part-payments or refunds against a single order ever need recording,
+   * this is the view that stops being able to express it.
+   */
+  const payments = useMemo(
+    () =>
+      orders
+        .filter((o) => o.paymentStatus === 'paid')
+        .sort((a, b) => b.createdDate.localeCompare(a.createdDate)),
+    [orders],
+  )
+
   const filteredOrders = useMemo(() => {
     let result = orders
-    if (activeTab !== 'all') {
+    if (activeTab === 'payments') {
+      result = payments
+    } else if (activeTab !== 'all') {
       result = result.filter((o) => o.stage === activeTab)
     }
     if (search.trim()) {
@@ -100,7 +129,7 @@ export function Orders() {
       )
     }
     return result
-  }, [orders, activeTab, search])
+  }, [orders, activeTab, search, payments])
 
   const tabs = [
     { id: 'all', label: 'All', count: stageCounts.all },
@@ -109,6 +138,9 @@ export function Orders() {
     { id: 'packed', label: 'Packed', count: stageCounts.packed },
     { id: 'shipped', label: 'Shipped', count: stageCounts.shipped },
     { id: 'delivered', label: 'Delivered', count: stageCounts.delivered },
+    // Payment history lives beside the stages rather than on its own page: it is the same
+    // orders, read as money received rather than as work in progress.
+    { id: 'payments', label: 'Payments', count: payments.length },
   ]
 
   async function handleAdvanceStage(order: Order) {
@@ -213,7 +245,100 @@ export function Orders() {
         </div>
       </div>
 
-      {/* Orders Table */}
+      {/*
+       * Payment history. Same orders, read as money received: when, from whom, how much, what
+       * it was for, and the proof. Clicking a row opens the order it belongs to.
+       */}
+      {activeTab === 'payments' ? (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink-100 bg-ink-50/50">
+                  <th className="pl-5 pr-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Date</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Order #</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Customer</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">For</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Discount</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Received</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Proof</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {filteredOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-10">
+                      <EmptyState
+                        icon={<Package size={28} />}
+                        title="No payments yet"
+                        description="A payment appears here once an order is marked paid — conversions and renewals both do that on confirmation."
+                      />
+                    </td>
+                  </tr>
+                )}
+                {filteredOrders.map((order) => {
+                  const renewal = sourceRenewal(order)
+                  return (
+                    <tr
+                      key={order.id}
+                      onClick={() => openDetail(order)}
+                      className="cursor-pointer transition-colors hover:bg-ink-50/60"
+                    >
+                      <td className="pl-5 pr-3 py-3.5 whitespace-nowrap text-xs text-ink-500">
+                        {formatIndianDate(order.createdDate)}
+                      </td>
+                      <td className="px-3 py-3.5 font-medium text-ink-900">{order.orderNumber}</td>
+                      <td className="px-3 py-3.5 text-ink-700">{order.customerName}</td>
+                      <td className="px-3 py-3.5 text-xs text-ink-600">
+                        {renewal ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); navigate('/renewals') }}
+                            className="font-medium text-primary-600 hover:text-primary-700"
+                          >
+                            Renewal — {renewal.medicineName}
+                          </button>
+                        ) : (
+                          <span className="text-ink-500">First order</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3.5 text-xs text-ink-500">
+                        {order.discountType === 'none'
+                          ? '—'
+                          : order.discountType === 'flat'
+                            ? `${formatIndianCurrency(order.discountValue)} off`
+                            : `${order.discountValue}% off`}
+                      </td>
+                      <td className="px-3 py-3.5 font-semibold tabular-nums text-ink-900">
+                        {formatIndianCurrency(order.payableAmount)}
+                      </td>
+                      <td className="px-3 py-3.5">
+                        {order.paymentScreenshot ? (
+                          <a
+                            href={order.paymentScreenshot}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-block rounded border border-ink-200 p-0.5 hover:border-primary-400"
+                          >
+                            <img
+                              src={order.paymentScreenshot}
+                              alt={`Payment proof for ${order.orderNumber}`}
+                              className="h-8 w-12 rounded-sm object-cover"
+                            />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-ink-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : (
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -310,6 +435,7 @@ export function Orders() {
           </table>
         </div>
       </Card>
+      )}
 
       {/* Order Detail Modal */}
       <Modal isOpen={detailOpen} onClose={closeDetail} title={`Order ${selectedOrder?.orderNumber ?? ''}`} size="lg">
@@ -460,6 +586,45 @@ export function Orders() {
                   Apply Discount
                 </Button>
               </div>
+            </div>
+
+            {/*
+             * Proof of payment. Every conversion and renewal demands one, and until now it was
+             * stored and never shown — evidence collected that nobody could look at.
+             */}
+            <div className="border-t border-ink-200 pt-4">
+              <p className="text-sm font-medium text-ink-700">Payment proof</p>
+              {selectedOrder.paymentScreenshot ? (
+                <a
+                  href={selectedOrder.paymentScreenshot}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-block rounded-lg border border-ink-200 p-1 hover:border-primary-400"
+                >
+                  <img
+                    src={selectedOrder.paymentScreenshot}
+                    alt={`Payment proof for ${selectedOrder.orderNumber}`}
+                    className="h-28 max-w-full rounded-md object-contain"
+                  />
+                </a>
+              ) : (
+                <p className="mt-1 text-sm text-ink-400">
+                  None on file — this order predates proof being kept per order.
+                </p>
+              )}
+              {sourceRenewal(selectedOrder) && (
+                <p className="mt-2 text-sm text-ink-600">
+                  Reorder of{' '}
+                  <span className="font-medium text-ink-900">{sourceRenewal(selectedOrder)!.medicineName}</span>.{' '}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/renewals')}
+                    className="font-medium text-primary-600 hover:text-primary-700"
+                  >
+                    View renewals
+                  </button>
+                </p>
+              )}
             </div>
 
             {/* Payment + Advance */}
