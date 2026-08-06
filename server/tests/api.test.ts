@@ -451,6 +451,37 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(after.filter((r: { status: string }) => r.status !== 'renewed')).toHaveLength(1);
   });
 
+  it('days on the reorder line sets when the next renewal falls due, separate from quantity', async () => {
+    // The reported confusion: the dialog had only a quantity box, so entering 20 billed 20
+    // units and did nothing to the supply period. Days and quantity are now distinct.
+    const before = new Set(
+      (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
+    );
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: caller.userId,
+      medicines: [{ name: 'Atorva', days: 30 }],
+    }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+
+    const renewed = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
+      items: [{ name: 'Atorva', quantity: 5, days: 45 }],
+      paymentScreenshot: 'data:image/png;base64,AAA',
+    });
+    expect(renewed.status).toBe(200);
+    // Quantity billed the units; it did not touch the schedule.
+    expect(renewed.body.order.medicines[0].quantity).toBe(5);
+
+    const next = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id))
+      .find((r: { status: string }) => r.status !== 'renewed');
+    const supplyDays = Math.round(
+      (new Date(next.renewalDate).getTime() - new Date(next.orderDate).getTime()) / 86_400_000,
+    );
+    expect(supplyDays).toBe(45);
+  });
+
   it('the reorder is editable — extra medicines and quantities reach the order', async () => {
     // A renewal is raised per medicine, but the reorder it triggers is a conversation: the
     // customer wants two months of this, and may as well add that. Sending only a quantity

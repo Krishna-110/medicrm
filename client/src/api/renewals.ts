@@ -3,7 +3,7 @@ import type { Renewal, FollowUp } from '@/types';
 import type { RenewResponse } from '../../../server/src/lib/contract.js';
 
 type RenewPayload = {
-  items: { name: string; quantity: number }[];
+  items: { name: string; quantity: number; days: number }[];
   paymentScreenshot: string;
   discountType: 'none' | 'flat' | 'percentage';
   discountValue: number;

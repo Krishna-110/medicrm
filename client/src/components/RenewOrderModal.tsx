@@ -17,7 +17,13 @@ import type { RenewResponse } from '../../../server/src/lib/contract.js'
  * lives here because it is the one thing that genuinely varies between cycles — a customer
  * reordering three months at once is the normal case this had no way to express.
  */
-type Row = { id: string; name: string; quantity: string }
+type Row = { id: string; name: string; quantity: string; days: string }
+
+/** Whole days between two ISO dates — the supply period the renewal was built on. */
+function daysBetween(fromIso: string, toIso: string): number {
+  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime()
+  return Math.max(Math.round(ms / 86_400_000), 1)
+}
 
 export function RenewOrderModal({
   renewal,
@@ -36,14 +42,24 @@ export function RenewOrderModal({
   const [submitting, setSubmitting] = useState(false)
 
   // Reset per renewal, so lines typed for one are never carried into the next. The renewal's
-  // own medicine is the starting point; everything else is added deliberately.
+  // own medicine is the starting point, its Days prefilled from the current cycle's length —
+  // everything else is added deliberately.
   useEffect(() => {
-    setRows(renewal ? [{ id: crypto.randomUUID(), name: renewal.medicineName, quantity: '1' }] : [])
+    setRows(
+      renewal
+        ? [{
+            id: crypto.randomUUID(),
+            name: renewal.medicineName,
+            quantity: '1',
+            days: String(daysBetween(renewal.orderDate, renewal.renewalDate)),
+          }]
+        : [],
+    )
     setDiscountType('none')
     setDiscountValue('')
     setScreenshot('')
     setSubmitting(false)
-  }, [renewal?.id, renewal?.medicineName])
+  }, [renewal?.id, renewal?.medicineName, renewal?.orderDate, renewal?.renewalDate])
 
   if (!renewal) return null
 
@@ -59,9 +75,13 @@ export function RenewOrderModal({
 
   const lines = rows.map(r => {
     const qty = Number(r.quantity)
-    const invalid = !r.name.trim() || !Number.isInteger(qty) || qty < 1
+    const days = Number(r.days)
+    const invalid =
+      !r.name.trim() ||
+      !Number.isInteger(qty) || qty < 1 ||
+      !Number.isInteger(days) || days < 1
     const unitPrice = priceOf(r.name)
-    return { ...r, qty, invalid, unitPrice, amount: invalid ? 0 : unitPrice * qty }
+    return { ...r, qty, days, invalid, unitPrice, amount: invalid ? 0 : unitPrice * qty }
   })
   const rowsInvalid = lines.some(l => l.invalid)
   const total = lines.reduce((n, l) => n + l.amount, 0)
@@ -86,7 +106,7 @@ export function RenewOrderModal({
     setSubmitting(true)
     try {
       const result = await renewalsApi.renew(renewal.id, {
-        items: lines.map(l => ({ name: l.name.trim(), quantity: l.qty })),
+        items: lines.map(l => ({ name: l.name.trim(), quantity: l.qty, days: l.days })),
         paymentScreenshot: screenshot,
         discountType,
         discountValue: raw,
@@ -126,8 +146,14 @@ export function RenewOrderModal({
                     emptyText="No medicines found"
                   />
                 </div>
-                <div className="flex w-full items-start gap-2 sm:w-auto">
-                  <div className="flex-1 sm:w-20 sm:flex-none">
+                {/*
+                 * Qty and Days are labelled because they were the whole confusion: one box of
+                 * numbers read as "days" when it billed quantity. Qty is units sold; Days is
+                 * how long the supply lasts, which sets when the next renewal falls due.
+                 */}
+                <div className="flex w-full items-end gap-2 sm:w-auto">
+                  <div className="flex-1 sm:w-16 sm:flex-none">
+                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Qty</label>
                     <input
                       type="number"
                       min={1}
@@ -137,7 +163,18 @@ export function RenewOrderModal({
                       className="field-input"
                     />
                   </div>
-                  <span className="w-24 pt-2 text-right text-sm tabular-nums text-ink-600">
+                  <div className="flex-1 sm:w-16 sm:flex-none">
+                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Days</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={line.days}
+                      onChange={e => setRow(line.id, { days: e.target.value })}
+                      aria-label={`Days of supply for medicine ${idx + 1}`}
+                      className="field-input"
+                    />
+                  </div>
+                  <span className="w-20 pb-2 text-right text-sm tabular-nums text-ink-600">
                     {money(line.amount)}
                   </span>
                   <button
@@ -146,7 +183,7 @@ export function RenewOrderModal({
                     disabled={rows.length === 1}
                     title="Remove line"
                     aria-label={`Remove medicine ${idx + 1}`}
-                    className="mt-0.5 shrink-0 rounded-lg p-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30 sm:p-2"
+                    className="mb-0.5 shrink-0 rounded-lg p-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30 sm:p-2"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -162,7 +199,7 @@ export function RenewOrderModal({
           </div>
           <button
             type="button"
-            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', quantity: '1' }])}
+            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', quantity: '1', days: '30' }])}
             className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
           >
             <Plus size={15} /> Add another medicine

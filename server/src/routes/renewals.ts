@@ -46,16 +46,23 @@ renewalsRouter.post(
     const rawItems: unknown = req.body?.items;
     const items = (Array.isArray(rawItems) && rawItems.length ? rawItems : [
       { name: renewal.medicineName, quantity: Number(req.body?.quantity ?? 1) },
-    ]) as { name?: unknown; quantity?: unknown }[];
+    ]) as { name?: unknown; quantity?: unknown; days?: unknown }[];
 
     const lines = items.map((item) => {
       const name = String(item?.name ?? '').trim();
       const quantity = Number(item?.quantity ?? 1);
+      // Days of supply. Optional — 0 means "not given, reuse the previous cycle" — but if
+      // present it must be a real duration. This is the number that decides when the medicine
+      // runs out and its next renewal falls due, which is separate from the quantity billed.
+      const days = item?.days == null ? 0 : Number(item.days);
       if (!name) throw ApiError.badRequest('Every line needs a medicine');
       if (!Number.isInteger(quantity) || quantity < 1) {
         throw ApiError.badRequest(`Quantity for ${name} must be a whole number of 1 or more`);
       }
-      return { name, quantity };
+      if (days !== 0 && (!Number.isInteger(days) || days < 1)) {
+        throw ApiError.badRequest(`Days for ${name} must be a whole number of 1 or more`);
+      }
+      return { name, quantity, days };
     });
     const screenshot = String(req.body?.paymentScreenshot ?? '').trim();
     if (!screenshot) {
@@ -144,9 +151,15 @@ renewalsRouter.post(
       }
       await auditCreate(tx, actorOf(req), 'orders', created);
 
-      // The next cycle reuses this one's durations rather than a fixed constant, so a 15-day
-      // course stays a 15-day course and a 90-day one stays 90.
-      const supplyDays = Math.max(istDayDiff(renewed.renewalDate, renewed.orderDate), 1);
+      // When the next cycle falls due comes from the days entered against this renewal's own
+      // medicine in the reorder — the field the user just set. If they left it blank, the
+      // previous cycle's length carries over, so a 15-day course stays 15. The grace window is
+      // always inherited; it is not something the reorder exposes.
+      const ownLine = priced.find(
+        (l) => l.name.toLowerCase() === renewed.medicineName.toLowerCase(),
+      );
+      const prevSupply = Math.max(istDayDiff(renewed.renewalDate, renewed.orderDate), 1);
+      const supplyDays = ownLine?.days || prevSupply;
       const graceDays = Math.max(istDayDiff(renewed.expiryDate, renewed.renewalDate), 1);
       const from = renewed.renewedAt!;
 
