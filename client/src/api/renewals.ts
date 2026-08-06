@@ -3,7 +3,8 @@ import type { Renewal, FollowUp } from '@/types';
 import type { RenewResponse } from '../../../server/src/lib/contract.js';
 
 type RenewPayload = {
-  items: { name: string; quantity: number; days: number }[];
+  // By days of supply, not units — a reorder mirrors a lead, where quantity is always one.
+  items: { name: string; days: number }[];
   paymentScreenshot: string;
   discountType: 'none' | 'flat' | 'percentage';
   discountValue: number;

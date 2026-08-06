@@ -38,31 +38,27 @@ renewalsRouter.post(
     if (!renewal) throw ApiError.notFound('Renewal not found');
 
     // Renewing is a sale, so it carries the same preconditions as converting a lead: what is
-    // being bought, proof of payment, and a discount that makes sense.
+    // being reordered, for how long, proof of payment, and a discount that makes sense.
     //
-    // Lines rather than a single quantity: a renewal is raised per medicine, but the reorder
-    // it triggers is a conversation — the customer wants two months of this and may as well
-    // add that. Defaults to the renewal's own medicine when the client sends nothing.
+    // A reorder is by DAYS of supply, not units — the same model as a lead, where a medicine
+    // is sold once and `days` says how long it lasts. Quantity is always one per line, as it
+    // is at conversion; there is no units field. Defaults to the renewal's own medicine when
+    // the client sends nothing.
     const rawItems: unknown = req.body?.items;
-    const items = (Array.isArray(rawItems) && rawItems.length ? rawItems : [
-      { name: renewal.medicineName, quantity: Number(req.body?.quantity ?? 1) },
-    ]) as { name?: unknown; quantity?: unknown; days?: unknown }[];
+    const items = (Array.isArray(rawItems) && rawItems.length
+      ? rawItems
+      : [{ name: renewal.medicineName }]) as { name?: unknown; days?: unknown }[];
 
     const lines = items.map((item) => {
       const name = String(item?.name ?? '').trim();
-      const quantity = Number(item?.quantity ?? 1);
-      // Days of supply. Optional — 0 means "not given, reuse the previous cycle" — but if
-      // present it must be a real duration. This is the number that decides when the medicine
-      // runs out and its next renewal falls due, which is separate from the quantity billed.
+      // Days of supply — 0 means "not given, reuse the previous cycle". It decides when the
+      // medicine runs out and its next renewal falls due; it is not a price multiplier.
       const days = item?.days == null ? 0 : Number(item.days);
       if (!name) throw ApiError.badRequest('Every line needs a medicine');
-      if (!Number.isInteger(quantity) || quantity < 1) {
-        throw ApiError.badRequest(`Quantity for ${name} must be a whole number of 1 or more`);
-      }
       if (days !== 0 && (!Number.isInteger(days) || days < 1)) {
         throw ApiError.badRequest(`Days for ${name} must be a whole number of 1 or more`);
       }
-      return { name, quantity, days };
+      return { name, quantity: 1, days };
     });
     const screenshot = String(req.body?.paymentScreenshot ?? '').trim();
     if (!screenshot) {

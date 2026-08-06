@@ -10,14 +10,14 @@ import type { DiscountType, Renewal } from '@/types'
 import type { RenewResponse } from '../../../server/src/lib/contract.js'
 
 /**
- * Confirming a renewal, which is a repeat sale: how much of the medicine, what it costs,
- * what discount applies, and proof of payment.
+ * Confirming a renewal, which is a repeat sale: which medicines, for how many days, what it
+ * costs, what discount applies, and proof of payment.
  *
- * Renewing used to be a single unconfirmed click that recorded no sale at all. The quantity
- * lives here because it is the one thing that genuinely varies between cycles — a customer
- * reordering three months at once is the normal case this had no way to express.
+ * Renewing used to be a single unconfirmed click that recorded no sale at all. It is by days
+ * of supply, not units — the same model as a lead — because the duration is what varies
+ * between cycles and what decides when the next renewal falls due.
  */
-type Row = { id: string; name: string; quantity: string; days: string }
+type Row = { id: string; name: string; days: string }
 
 /** Whole days between two ISO dates — the supply period the renewal was built on. */
 function daysBetween(fromIso: string, toIso: string): number {
@@ -50,7 +50,6 @@ export function RenewOrderModal({
         ? [{
             id: crypto.randomUUID(),
             name: renewal.medicineName,
-            quantity: '1',
             days: String(daysBetween(renewal.orderDate, renewal.renewalDate)),
           }]
         : [],
@@ -74,14 +73,12 @@ export function RenewOrderModal({
     state.medicines.find(m => m.name.toLowerCase() === name.trim().toLowerCase())?.unitPrice ?? 0
 
   const lines = rows.map(r => {
-    const qty = Number(r.quantity)
     const days = Number(r.days)
-    const invalid =
-      !r.name.trim() ||
-      !Number.isInteger(qty) || qty < 1 ||
-      !Number.isInteger(days) || days < 1
+    const invalid = !r.name.trim() || !Number.isInteger(days) || days < 1
     const unitPrice = priceOf(r.name)
-    return { ...r, qty, days, invalid, unitPrice, amount: invalid ? 0 : unitPrice * qty }
+    // One unit per line, priced like a lead conversion; days is the supply period, not a
+    // price multiplier.
+    return { ...r, days, invalid, unitPrice, amount: invalid ? 0 : unitPrice }
   })
   const rowsInvalid = lines.some(l => l.invalid)
   const total = lines.reduce((n, l) => n + l.amount, 0)
@@ -106,7 +103,7 @@ export function RenewOrderModal({
     setSubmitting(true)
     try {
       const result = await renewalsApi.renew(renewal.id, {
-        items: lines.map(l => ({ name: l.name.trim(), quantity: l.qty, days: l.days })),
+        items: lines.map(l => ({ name: l.name.trim(), days: l.days })),
         paymentScreenshot: screenshot,
         discountType,
         discountValue: raw,
@@ -147,23 +144,12 @@ export function RenewOrderModal({
                   />
                 </div>
                 {/*
-                 * Qty and Days are labelled because they were the whole confusion: one box of
-                 * numbers read as "days" when it billed quantity. Qty is units sold; Days is
-                 * how long the supply lasts, which sets when the next renewal falls due.
+                 * Days, not quantity. A reorder is sold by supply duration — how long the
+                 * medicine lasts, which sets when the next renewal falls due — the same model
+                 * as a lead. The price is the medicine's, once, regardless of days.
                  */}
                 <div className="flex w-full items-end gap-2 sm:w-auto">
-                  <div className="flex-1 sm:w-16 sm:flex-none">
-                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Qty</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={line.quantity}
-                      onChange={e => setRow(line.id, { quantity: e.target.value })}
-                      aria-label={`Quantity for medicine ${idx + 1}`}
-                      className="field-input"
-                    />
-                  </div>
-                  <div className="flex-1 sm:w-16 sm:flex-none">
+                  <div className="flex-1 sm:w-20 sm:flex-none">
                     <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Days</label>
                     <input
                       type="number"
@@ -174,7 +160,7 @@ export function RenewOrderModal({
                       className="field-input"
                     />
                   </div>
-                  <span className="w-20 pb-2 text-right text-sm tabular-nums text-ink-600">
+                  <span className="w-24 pb-2 text-right text-sm tabular-nums text-ink-600">
                     {money(line.amount)}
                   </span>
                   <button
@@ -199,7 +185,7 @@ export function RenewOrderModal({
           </div>
           <button
             type="button"
-            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', quantity: '1', days: '30' }])}
+            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', days: '30' }])}
             className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
           >
             <Plus size={15} /> Add another medicine

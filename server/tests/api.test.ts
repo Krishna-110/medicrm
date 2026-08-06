@@ -433,13 +433,13 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect((await as(admin).post(`/api/renewals/${renewal.id}/renew`, {})).status).toBe(400);
 
     const renewed = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
-      quantity: 2,
+      items: [{ name: 'Atorva', days: 30 }],
       paymentScreenshot: 'data:image/png;base64,AAA',
       discountType: 'flat',
       discountValue: 100,
     });
     expect(renewed.status).toBe(200);
-    // It places the repeat order, priced from the quantity, not just a status flip.
+    // It places the repeat order and applies the discount, not just a status flip.
     expect(renewed.body.order.payableAmount).toBe(renewed.body.order.totalAmount - 100);
     expect(renewed.body.renewal.status).toBe('renewed');
 
@@ -451,9 +451,10 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(after.filter((r: { status: string }) => r.status !== 'renewed')).toHaveLength(1);
   });
 
-  it('days on the reorder line sets when the next renewal falls due, separate from quantity', async () => {
-    // The reported confusion: the dialog had only a quantity box, so entering 20 billed 20
-    // units and did nothing to the supply period. Days and quantity are now distinct.
+  it('days on the reorder line sets when the next renewal falls due', async () => {
+    // The reported confusion: the dialog billed by a quantity box, so entering 20 charged for
+    // 20 units and did nothing to the supply period. A reorder is by days now, like a lead —
+    // quantity is always one, and days is what dates the next renewal.
     const before = new Set(
       (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
     );
@@ -465,13 +466,17 @@ describe('follow-up scheduling stays in step with the lead', () => {
     const [renewal] = (await as(admin).get('/api/renewals')).body
       .filter((r: { id: string }) => !before.has(r.id));
 
+    const product = (await as(admin).get('/api/medicines')).body
+      .find((m: { name: string }) => m.name === 'Atorva');
+
     const renewed = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
-      items: [{ name: 'Atorva', quantity: 5, days: 45 }],
+      items: [{ name: 'Atorva', days: 45 }],
       paymentScreenshot: 'data:image/png;base64,AAA',
     });
     expect(renewed.status).toBe(200);
-    // Quantity billed the units; it did not touch the schedule.
-    expect(renewed.body.order.medicines[0].quantity).toBe(5);
+    // One unit, priced once — days is not a multiplier.
+    expect(renewed.body.order.medicines[0].quantity).toBe(1);
+    expect(renewed.body.order.totalAmount).toBe(product.unitPrice);
 
     const next = (await as(admin).get('/api/renewals')).body
       .filter((r: { id: string }) => !before.has(r.id))
@@ -482,10 +487,9 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(supplyDays).toBe(45);
   });
 
-  it('the reorder is editable — extra medicines and quantities reach the order', async () => {
+  it('the reorder is editable — extra medicines reach the order, each priced once', async () => {
     // A renewal is raised per medicine, but the reorder it triggers is a conversation: the
-    // customer wants two months of this, and may as well add that. Sending only a quantity
-    // could not express it.
+    // customer renewing this may as well add that. Each line is one unit of the medicine.
     const before = new Set(
       (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
     );
@@ -499,8 +503,8 @@ describe('follow-up scheduling stays in step with the lead', () => {
 
     const renewed = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
       items: [
-        { name: 'Atorva', quantity: 2 },
-        { name: 'Sansamrit', quantity: 3 },
+        { name: 'Atorva', days: 30 },
+        { name: 'Sansamrit', days: 15 },
       ],
       paymentScreenshot: 'data:image/png;base64,AAA',
     });
@@ -508,10 +512,9 @@ describe('follow-up scheduling stays in step with the lead', () => {
 
     const lines = renewed.body.order.medicines;
     expect(lines).toHaveLength(2);
-    expect(Object.fromEntries(lines.map((m: { name: string; quantity: number }) => [m.name, m.quantity])))
-      .toEqual({ Atorva: 2, Sansamrit: 3 });
-    // Totalled across both lines, not just the renewal's own medicine.
-    const expected = lines.reduce((n: number, m: { price: number; quantity: number }) => n + m.price * m.quantity, 0);
+    expect(lines.every((m: { quantity: number }) => m.quantity === 1)).toBe(true);
+    // Total is the two medicines' prices, each once.
+    const expected = lines.reduce((n: number, m: { price: number }) => n + m.price, 0);
     expect(renewed.body.order.totalAmount).toBe(expected);
   });
 
@@ -545,7 +548,7 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(await countReminders()).toBe(start + 1);
   });
 
-  it('refuses a reorder line with a nonsense quantity', async () => {
+  it('refuses a reorder line with a nonsense day count', async () => {
     const before = new Set(
       (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
     );
@@ -555,7 +558,7 @@ describe('follow-up scheduling stays in step with the lead', () => {
       .filter((r: { id: string }) => !before.has(r.id));
 
     const res = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
-      items: [{ name: 'Atorva', quantity: 0 }],
+      items: [{ name: 'Atorva', days: -5 }],
       paymentScreenshot: 'data:image/png;base64,AAA',
     });
     expect(res.status).toBe(400);
