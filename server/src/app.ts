@@ -10,6 +10,7 @@ import { renewalsRouter } from './routes/renewals.js';
 import { followUpsRouter } from './routes/followUps.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { miscRouter } from './routes/misc.js';
+import { locationsRouter } from './routes/locations.js';
 
 /**
  * The Express app, exported without listening.
@@ -38,6 +39,7 @@ app.use('/api/orders', requireAuth, ordersRouter);
 app.use('/api/renewals', requireAuth, renewalsRouter);
 app.use('/api/follow-ups', requireAuth, followUpsRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
+app.use('/api/locations', requireAuth, locationsRouter);
 app.use('/api', requireAuth, miscRouter);
 
 // JSON for unknown routes, so a typo in the client is not answered with an HTML error page.

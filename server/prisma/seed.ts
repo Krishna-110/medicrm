@@ -158,6 +158,24 @@ async function main() {
   }
   console.log(`  products (${PRODUCTS.length})`);
 
+  // Stock lives per location. The migration creates Main Store and, on a database that
+  // already had products, moves their stock into it — but a fresh seed builds the products
+  // afterwards, so the rows are created here. Each product's whole stock starts at Main Store.
+  const mainStore = await prisma.location.upsert({
+    where: { name: 'Main Store' },
+    create: { name: 'Main Store' },
+    update: {},
+  });
+  for (const [sku, , , , , stockQuantity] of PRODUCTS) {
+    const product = await prisma.product.findUniqueOrThrow({ where: { sku } });
+    await prisma.productLocationStock.upsert({
+      where: { productId_locationId: { productId: product.id, locationId: mainStore.id } },
+      create: { productId: product.id, locationId: mainStore.id, quantity: stockQuantity },
+      update: { quantity: stockQuantity },
+    });
+  }
+  console.log('  stock placed at Main Store');
+
   // ── pipeline ───────────────────────────────────────────────────────────────────────────
   const sneha = users['sneha.iyer@medicrm.in']!;
   const vikram = users['vikram.singh@medicrm.in']!;

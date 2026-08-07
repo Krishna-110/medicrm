@@ -16,6 +16,9 @@ medicinesRouter.get(
     const products = await scopedFor(actorOf(req)).product.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
+      // The per-location breakdown feeds the Stock page's expandable view; the serializer sums
+      // it for the headline total.
+      include: { locationStocks: { where: { location: { deletedAt: null } }, include: { location: true } } },
     });
     res.json(products.map(serializeMedicine));
   }),

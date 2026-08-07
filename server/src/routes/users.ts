@@ -4,7 +4,7 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route } from '../lib/errors.js';
-import { assertCanEditUser, assertNoPrivilegeEscalation, requireAdmin } from '../auth/scope.js';
+import { assertCanEditUser, assertNoPrivilegeEscalation, isAdmin, requireAdmin } from '../auth/scope.js';
 import { serializeUser } from '../lib/serialize.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
 
@@ -19,6 +19,7 @@ usersRouter.get(
     const users = await scopedFor(actorOf(req)).user.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
+      include: { location: true },
     });
     res.json(users.map(serializeUser));
   }),
@@ -45,8 +46,12 @@ usersRouter.post(
           // without needing the citext extension.
           email: String(body.email).trim().toLowerCase(),
           role: body.role === 'admin' ? 'admin' : 'caller',
+          // The location a caller will sell from, chosen at creation. An unknown id fails the
+          // foreign key and surfaces as a 400.
+          locationId: body.locationId ?? null,
           passwordHash,
         },
+        include: { location: true },
       });
       await auditCreate(tx, actor, 'users', created);
       return created;
@@ -72,9 +77,12 @@ usersRouter.patch(
     const data: Record<string, unknown> = {};
     for (const f of EDITABLE) if (f in body) data[f] = body[f] ?? null;
     if (typeof data.email === 'string') data.email = data.email.trim().toLowerCase();
+    // Reassigning a caller's location is admin-only — a caller cannot move their own stock
+    // source. Kept out of EDITABLE, which a caller editing themselves may also write.
+    if ('locationId' in body && isAdmin(actor)) data.locationId = body.locationId ?? null;
 
     const user = await prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({ where: { id }, data });
+      const updated = await tx.user.update({ where: { id }, data, include: { location: true } });
       await auditUpdate(tx, actor, 'users', before, updated);
       return updated;
     });

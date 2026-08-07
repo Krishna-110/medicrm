@@ -47,6 +47,10 @@ const SCOPED: Record<string, ScopeFn> = {
  */
 const GLOBAL = new Set([
   'product',
+  // Stock reference data — shared, not owned by a caller. A caller's own scoping is enforced
+  // on the sale (their location's stock), not by hiding rows here.
+  'location',
+  'productLocationStock',
   'leadStatus',
   'leadSource',
   'orderStage',

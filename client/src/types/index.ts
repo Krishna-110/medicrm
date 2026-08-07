@@ -13,6 +13,11 @@ import type {
 } from '../../../server/src/lib/vocab.js';
 
 
+export type Location = {
+  id: string;
+  name: string;
+};
+
 export type User = {
   id: string;
   name: string;
@@ -25,6 +30,9 @@ export type User = {
   lastLogin: string;
   avatar?: string;
   password?: string;
+  /** The location a caller sells from; unset for admins and unassigned callers. */
+  locationId?: string;
+  locationName?: string;
 };
 
 
@@ -70,13 +78,22 @@ export type Lead = {
 };
 
 
+export type MedicineLocationStock = {
+  locationId: string;
+  locationName: string;
+  quantity: number;
+};
+
 export type Medicine = {
   id: string;
   name: string;
   genericName?: string;
   dosageForm?: DosageForm;
   unitPrice: number;
+  /** Total across all locations. */
   stockQuantity: number;
+  /** Per-location breakdown; present when the list is loaded, empty otherwise. */
+  locations?: MedicineLocationStock[];
   isActive: boolean;
   createdDate: string;
 };

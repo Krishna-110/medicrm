@@ -28,10 +28,14 @@ const d10 = (d: Date | null | undefined): string => (d ? dateOnly.format(d) : ''
 /** Decimal columns arrive as Prisma.Decimal; the API sends plain numbers. */
 const num = (v: Prisma.Decimal | number | null | undefined): number => (v == null ? 0 : Number(v));
 
+type LocationRow = { id: string; name: string };
+export const serializeLocation = (l: LocationRow) => ({ id: l.id, name: l.name });
+
 type User = {
   id: string; name: string; employeeId: string; phone: string; email: string;
   role: string; status: string; assignedLeadsCount: number;
   lastLoginAt: Date | null; avatarUrl: string | null;
+  locationId: string | null; location?: LocationRow | null;
 };
 
 export const serializeUser = (u: User) => ({
@@ -45,6 +49,9 @@ export const serializeUser = (u: User) => ({
   assignedLeads: u.assignedLeadsCount,
   lastLogin: d10(u.lastLoginAt),
   avatar: u.avatarUrl ?? undefined,
+  locationId: u.locationId ?? undefined,
+  // Present only when the caller included the relation; the name saves the client a lookup.
+  locationName: u.location?.name ?? undefined,
 });
 
 type LeadMedicine = { id: string; medicineName: string; days: number };
@@ -100,21 +107,37 @@ export const serializeLead = (l: Lead) => ({
   activities: (l.activities ?? []).map(serializeLeadActivity),
 });
 
+type ProductLocationStock = {
+  locationId: string; quantity: number; location?: LocationRow;
+};
 type Product = {
   id: string; brandName: string | null; genericName: string; dosageForm: string | null;
   unitPrice: Prisma.Decimal; stockQuantity: number; isActive: boolean; createdAt: Date;
+  locationStocks?: ProductLocationStock[];
 };
 /** The API calls a product a "medicine", and its brand name is the display name. */
-export const serializeMedicine = (p: Product) => ({
-  id: p.id,
-  name: p.brandName ?? p.genericName,
-  genericName: p.genericName ?? undefined,
-  dosageForm: (p.dosageForm ?? undefined) as DosageForm | undefined,
-  unitPrice: num(p.unitPrice),
-  stockQuantity: p.stockQuantity,
-  isActive: p.isActive,
-  createdDate: d10(p.createdAt),
-});
+export const serializeMedicine = (p: Product) => {
+  const breakdown = p.locationStocks ?? [];
+  return {
+    id: p.id,
+    name: p.brandName ?? p.genericName,
+    genericName: p.genericName ?? undefined,
+    dosageForm: (p.dosageForm ?? undefined) as DosageForm | undefined,
+    unitPrice: num(p.unitPrice),
+    // The column is still the total the app reads for pricing and coverage; the per-location
+    // rows are exposed alongside it and become the source of truth in the next phase, when the
+    // write path and deduction move to them together.
+    stockQuantity: p.stockQuantity,
+    // Per-location detail for the Stock page's expandable view; empty when not requested.
+    locations: breakdown.map((s) => ({
+      locationId: s.locationId,
+      locationName: s.location?.name ?? '',
+      quantity: s.quantity,
+    })),
+    isActive: p.isActive,
+    createdDate: d10(p.createdAt),
+  };
+};
 
 type OrderItem = { medicineNameSnapshot: string; quantity: number; unitPriceSnapshot: Prisma.Decimal };
 export const serializeOrderItem = (i: OrderItem) => ({
