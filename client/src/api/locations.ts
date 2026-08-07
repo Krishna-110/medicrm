@@ -5,4 +5,5 @@ export const locationsApi = {
   list: () => api.get<Location[]>('/locations'),
   create: (name: string) => api.post<Location>('/locations', { name }),
   rename: (id: string, name: string) => api.patch<Location>(`/locations/${id}`, { name }),
+  remove: (id: string) => api.delete<void>(`/locations/${id}`),
 };

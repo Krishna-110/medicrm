@@ -226,6 +226,7 @@ export type AppAction =
   | { type: 'ADD_LEAD_MEDICINE'; payload: { leadId: string; medicine: LeadMedicineItem } }
   | { type: 'ADD_LOCATION'; payload: { location: Location } }
   | { type: 'UPDATE_LOCATION'; payload: { id: string; updates: Partial<Location> } }
+  | { type: 'DELETE_LOCATION'; payload: { id: string } }
   | { type: 'ADD_MEDICINE'; payload: { medicine: Medicine } }
   | { type: 'UPDATE_MEDICINE'; payload: { id: string; updates: Partial<Medicine> } }
   | { type: 'DELETE_MEDICINE'; payload: { id: string } };

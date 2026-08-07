@@ -702,6 +702,50 @@ describe('follow-up scheduling stays in step with the lead', () => {
   });
 });
 
+describe('location deletion', () => {
+  it('deletes an empty location, and it drops out of the list', async () => {
+    const { body: loc } = await as(admin).post('/api/locations', { name: `Empty ${nextId()}` });
+    expect((await as(admin).delete(`/api/locations/${loc.id}`)).status).toBe(204);
+    const names = (await as(admin).get('/api/locations')).body.map((l: { id: string }) => l.id);
+    expect(names).not.toContain(loc.id);
+  });
+
+  it('refuses to delete a location that still holds stock, and keeps it', async () => {
+    const { body: loc } = await as(admin).post('/api/locations', { name: `Stocked ${nextId()}` });
+    const atorva = (await as(admin).get('/api/medicines')).body.find((m: { name: string }) => m.name === 'Atorva');
+    await as(admin).post(`/api/medicines/${atorva.id}/stock`, { mode: 'set', quantity: 5, locationId: loc.id });
+
+    const res = await as(admin).delete(`/api/locations/${loc.id}`);
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/still holds stock/i);
+    // Still there, and still convertible to a delete once zeroed.
+    expect((await as(admin).get('/api/locations')).body.map((l: { id: string }) => l.id)).toContain(loc.id);
+
+    // Zero it, and now it goes.
+    await as(admin).post(`/api/medicines/${atorva.id}/stock`, { mode: 'set', quantity: 0, locationId: loc.id });
+    expect((await as(admin).delete(`/api/locations/${loc.id}`)).status).toBe(204);
+  });
+
+  it('refuses to delete a location a caller is assigned to, and keeps it', async () => {
+    const { body: loc } = await as(admin).post('/api/locations', { name: `Manned ${nextId()}` });
+    await as(admin).post('/api/users', {
+      name: 'Manned Caller', employeeId: `MC${nextId()}`, phone: '9000000333',
+      email: `manned${nextId()}@medicrm.in`, role: 'caller', locationId: loc.id,
+    });
+
+    const res = await as(admin).delete(`/api/locations/${loc.id}`);
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/caller/i);
+    expect((await as(admin).get('/api/locations')).body.map((l: { id: string }) => l.id)).toContain(loc.id);
+  });
+
+  it('refuses a caller — deletion is admin-only, and the location survives', async () => {
+    const { body: loc } = await as(admin).post('/api/locations', { name: `Guarded ${nextId()}` });
+    expect((await as(caller).delete(`/api/locations/${loc.id}`)).status).toBe(403);
+    expect((await as(admin).get('/api/locations')).body.map((l: { id: string }) => l.id)).toContain(loc.id);
+  });
+});
+
 describe('authorization', () => {
   it('admin-only endpoints refuse a caller with 403, and write nothing', async () => {
     const med = (await as(admin).get('/api/medicines')).body[0];

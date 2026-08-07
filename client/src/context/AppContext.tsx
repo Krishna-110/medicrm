@@ -212,6 +212,12 @@ function appReducer(state: AppState, action: AppAction): AppState {
         ),
       };
 
+    case 'DELETE_LOCATION':
+      return {
+        ...state,
+        locations: state.locations.filter((l) => l.id !== action.payload.id),
+      };
+
     case 'ADD_MEDICINE':
       return { ...state, medicines: [action.payload.medicine, ...state.medicines] };
 
