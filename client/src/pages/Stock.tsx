@@ -453,17 +453,21 @@ export function Stock() {
                   const value = edited ?? String(current)
                   const changed = edited !== undefined && edited.trim() !== '' && Number(edited) !== current
                   return (
-                    <div key={loc.id} className="flex items-center gap-2">
-                      <span className="flex-1 truncate text-sm text-ink-600">{loc.name}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step="1"
-                        value={value}
-                        onChange={e => setStockEdits(s => ({ ...s, [loc.id]: e.target.value }))}
-                        className="field-input w-24 text-right"
-                        aria-label={`Stock at ${loc.name}`}
-                      />
+                    <div key={loc.id} className="flex items-center gap-3">
+                      {/* Name gets the flex space; the input sits in a fixed box so field-input's
+                          width:100% fills the box, not the whole row (which hid the name). */}
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-700">{loc.name}</span>
+                      <div className="w-28 shrink-0">
+                        <input
+                          type="number"
+                          min={0}
+                          step="1"
+                          value={value}
+                          onChange={e => setStockEdits(s => ({ ...s, [loc.id]: e.target.value }))}
+                          className="field-input text-right"
+                          aria-label={`Stock at ${loc.name}`}
+                        />
+                      </div>
                       <Button
                         type="button"
                         size="sm"
