@@ -324,9 +324,24 @@ export function Stock() {
             */}
           {editingMedicine && (
             <div className="border-t border-ink-100 pt-4">
-              <label className="field-label" htmlFor="stock-add">
-                Add stock <span className="font-normal text-ink-400">· {editingMedicine.stockQuantity} in stock</span>
-              </label>
+              {/* Where the stock actually sits, so a restock isn't done blind. Maps over every
+                  location (0 when this item has no row there yet), so a just-added location
+                  shows up immediately at 0. */}
+              <div className="field-label mb-1.5">
+                Stock by location <span className="font-normal text-ink-400">· {editingMedicine.stockQuantity} total</span>
+              </div>
+              <div className="mb-4 space-y-1">
+                {state.locations.map(loc => {
+                  const qty = editingMedicine.locations?.find(l => l.locationId === loc.id)?.quantity ?? 0
+                  return (
+                    <div key={loc.id} className="flex items-center justify-between rounded-lg bg-ink-50 px-3 py-1.5 text-sm">
+                      <span className="text-ink-600">{loc.name}</span>
+                      <span className="font-semibold text-ink-900">{qty}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <label className="field-label" htmlFor="stock-add">Add stock</label>
               <input
                 id="stock-add"
                 type="number"
