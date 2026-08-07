@@ -183,6 +183,7 @@ export type AppState = {
   notifications: Notification[];
   medicines: Medicine[];
   dashboard: DashboardStats | null;
+  locations: Location[];
   searchQuery: string;
   booting: boolean;
 };
@@ -195,6 +196,7 @@ export type HydratePayload = {
   followUps: FollowUp[];
   notifications: Notification[];
   medicines: Medicine[];
+  locations: Location[];
   dashboard: DashboardStats;
 };
 
@@ -222,6 +224,8 @@ export type AppAction =
   | { type: 'SET_SEARCH_QUERY'; payload: { query: string } }
   | { type: 'ADD_LEAD_ACTIVITY'; payload: { leadId: string; activity: LeadActivity } }
   | { type: 'ADD_LEAD_MEDICINE'; payload: { leadId: string; medicine: LeadMedicineItem } }
+  | { type: 'ADD_LOCATION'; payload: { location: Location } }
+  | { type: 'UPDATE_LOCATION'; payload: { id: string; updates: Partial<Location> } }
   | { type: 'ADD_MEDICINE'; payload: { medicine: Medicine } }
   | { type: 'UPDATE_MEDICINE'; payload: { id: string; updates: Partial<Medicine> } }
   | { type: 'DELETE_MEDICINE'; payload: { id: string } };

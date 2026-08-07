@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { medicinesApi } from '@/api/medicines'
+import { locationsApi } from '@/api/locations'
 import { emitToast } from '@/lib/toast'
 import type { Medicine, DosageForm } from '@/types'
 import { Card } from '@/components/ui/Card'
@@ -10,7 +11,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Plus, Edit2, Trash2, Package } from 'lucide-react'
+import { Plus, Edit2, Trash2, Package, ChevronDown, ChevronRight } from 'lucide-react'
 
 const dosageFormOptions: { value: DosageForm; label: string }[] = [
   { value: 'tablet', label: 'Tablet' },
@@ -48,6 +49,8 @@ type MedicineForm = {
   openingStock: string
   /** Units to add to stock, edited alongside the catalogue fields. Blank leaves stock alone. */
   addStock: string
+  /** The location the added stock (or opening stock) lands at. */
+  locationId: string
 }
 
 const emptyForm: MedicineForm = {
@@ -57,6 +60,7 @@ const emptyForm: MedicineForm = {
   unitPrice: '',
   openingStock: '0',
   addStock: '',
+  locationId: '',
 }
 
 export function Stock() {
@@ -65,6 +69,13 @@ export function Stock() {
   const [showModal, setShowModal] = useState(false)
   const [editingMedicine, setEditingMedicine] = useState<Medicine | null>(null)
   const [form, setForm] = useState<MedicineForm>(emptyForm)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [newLocation, setNewLocation] = useState('')
+  const [addingLocation, setAddingLocation] = useState(false) // showing the "new location" input
+  const [savingLocation, setSavingLocation] = useState(false) // create request in flight
+
+  // Default a stock target to the first location, so the picker is never blank when one exists.
+  const defaultLocationId = state.locations[0]?.id ?? ''
 
   const filtered = state.medicines.filter(
     m =>
@@ -77,7 +88,9 @@ export function Stock() {
 
   function openCreate() {
     setEditingMedicine(null)
-    setForm(emptyForm)
+    setForm({ ...emptyForm, locationId: defaultLocationId })
+    setNewLocation('')
+    setAddingLocation(false)
     setShowModal(true)
   }
 
@@ -90,8 +103,29 @@ export function Stock() {
       unitPrice: String(medicine.unitPrice),
       openingStock: String(medicine.stockQuantity),
       addStock: '',
+      locationId: defaultLocationId,
     })
+    setNewLocation('')
+    setAddingLocation(false)
     setShowModal(true)
+  }
+
+  async function handleCreateLocation() {
+    const name = newLocation.trim()
+    if (!name) return
+    setSavingLocation(true)
+    try {
+      const location = await locationsApi.create(name)
+      dispatch({ type: 'ADD_LOCATION', payload: { location } })
+      setForm(f => ({ ...f, locationId: location.id })) // select the one just made
+      setNewLocation('')
+      setAddingLocation(false)
+      emitToast(`Location "${location.name}" added`, 'success')
+    } catch (err) {
+      emitToast(err instanceof Error ? err.message : 'Failed to add location')
+    } finally {
+      setSavingLocation(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -112,10 +146,10 @@ export function Stock() {
     try {
       if (editingMedicine) {
         let medicine = await medicinesApi.update(editingMedicine.id, updates)
-        if (toAdd > 0) medicine = await medicinesApi.adjustStock(editingMedicine.id, 'add', toAdd)
+        if (toAdd > 0) medicine = await medicinesApi.adjustStock(editingMedicine.id, 'add', toAdd, form.locationId || undefined)
         dispatch({ type: 'UPDATE_MEDICINE', payload: { id: medicine.id, updates: medicine } })
       } else {
-        const medicine = await medicinesApi.create({ ...updates, stockQuantity: Number(form.openingStock) || 0 })
+        const medicine = await medicinesApi.create({ ...updates, stockQuantity: Number(form.openingStock) || 0, locationId: form.locationId || undefined })
         dispatch({ type: 'ADD_MEDICINE', payload: { medicine } })
       }
       setShowModal(false)
@@ -165,8 +199,12 @@ export function Stock() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(medicine => (
-                <tr key={medicine.id} className="border-b border-ink-50 transition-colors last:border-0 hover:bg-primary-50/30">
+              {filtered.map(medicine => {
+                const expanded = expandedId === medicine.id
+                const breakdown = medicine.locations ?? []
+                return (
+                <Fragment key={medicine.id}>
+                <tr className="border-b border-ink-50 transition-colors last:border-0 hover:bg-primary-50/30">
                   <td className="py-3 pl-5 pr-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-teal-600 text-white">
@@ -181,9 +219,17 @@ export function Stock() {
                   </td>
                   <td className="px-3 py-3 font-medium text-ink-900">{formatPrice(medicine.unitPrice)}</td>
                   <td className="px-3 py-3">
-                    <Badge variant={stockBadgeVariant(medicine.stockQuantity)} dot>
-                      {medicine.stockQuantity} units
-                    </Badge>
+                    {/* Total across locations; tap to reveal the per-location split. */}
+                    <button
+                      onClick={() => setExpandedId(expanded ? null : medicine.id)}
+                      title="Show location breakdown"
+                      className="flex items-center gap-1 rounded-lg p-0.5 transition-colors hover:bg-ink-100"
+                    >
+                      {expanded ? <ChevronDown size={14} className="text-ink-400" /> : <ChevronRight size={14} className="text-ink-400" />}
+                      <Badge variant={stockBadgeVariant(medicine.stockQuantity)} dot>
+                        {medicine.stockQuantity} units
+                      </Badge>
+                    </button>
                   </td>
                   <td className="px-3 py-3">
                     <button onClick={() => toggleStatus(medicine)} title="Toggle status">
@@ -199,7 +245,27 @@ export function Stock() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                {expanded && (
+                  <tr className="border-b border-ink-50 bg-ink-50/40">
+                    <td colSpan={7} className="px-5 py-3">
+                      {breakdown.length === 0 ? (
+                        <span className="text-xs text-ink-400">No location breakdown for this item.</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {breakdown.map(loc => (
+                            <span key={loc.locationId} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 text-xs text-ink-600 ring-1 ring-ink-100">
+                              {loc.locationName}
+                              <strong className="font-semibold text-ink-900">{loc.quantity}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                )
+              })}
             </tbody>
           </table>
           {filtered.length === 0 && (
@@ -273,6 +339,43 @@ export function Stock() {
               />
             </div>
           )}
+          {/* Which location the stock lands at — opening stock on create, received units on edit. */}
+          <div>
+            <label className="field-label" htmlFor="stock-location">
+              {editingMedicine ? 'Add stock to location' : 'Opening stock location'}
+            </label>
+            {addingLocation || state.locations.length === 0 ? (
+              <div className="flex gap-2">
+                <input
+                  id="stock-new-location"
+                  type="text"
+                  value={newLocation}
+                  onChange={e => setNewLocation(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCreateLocation() } }}
+                  className="field-input"
+                  placeholder="New location name"
+                />
+                <Button type="button" onClick={handleCreateLocation} disabled={savingLocation}>Add</Button>
+                {state.locations.length > 0 && (
+                  <Button type="button" variant="secondary" onClick={() => { setAddingLocation(false); setNewLocation('') }}>Cancel</Button>
+                )}
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <select
+                  id="stock-location"
+                  value={form.locationId}
+                  onChange={e => setForm(f => ({ ...f, locationId: e.target.value }))}
+                  className="field-input"
+                >
+                  {state.locations.map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+                <Button type="button" variant="secondary" onClick={() => setAddingLocation(true)}>+ New</Button>
+              </div>
+            )}
+          </div>
           <div className="flex justify-end gap-3 border-t border-ink-100 pt-4">
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
             <Button type="submit">{editingMedicine ? 'Save Changes' : 'Add Medicine'}</Button>

@@ -35,7 +35,7 @@ export function Users() {
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [form, setForm] = useState({ name: '', employeeId: '', phone: '', email: '', role: 'caller' as UserRole, password: '' })
+  const [form, setForm] = useState({ name: '', employeeId: '', phone: '', email: '', role: 'caller' as UserRole, password: '', locationId: '' })
 
   const filtered = state.users.filter(
     (u) =>
@@ -48,24 +48,27 @@ export function Users() {
 
   function openCreate() {
     setEditingUser(null)
-    setForm({ name: '', employeeId: '', phone: '', email: '', role: 'caller', password: '' })
+    setForm({ name: '', employeeId: '', phone: '', email: '', role: 'caller', password: '', locationId: '' })
     setShowModal(true)
   }
 
   function openEdit(user: User) {
     setEditingUser(user)
-    setForm({ name: user.name, employeeId: user.employeeId, phone: user.phone, email: user.email, role: user.role, password: '' })
+    setForm({ name: user.name, employeeId: user.employeeId, phone: user.phone, email: user.email, role: user.role, password: '', locationId: user.locationId ?? '' })
     setShowModal(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    // A location only applies to callers; an admin sells from none. Sent as null to clear it,
+    // a value to set it.
+    const locationId = form.role === 'caller' ? (form.locationId || null) : null
     try {
       if (editingUser) {
-        const user = await usersApi.update(editingUser.id, { ...form })
+        const user = await usersApi.update(editingUser.id, { ...form, locationId })
         dispatch({ type: 'UPDATE_USER', payload: { id: user.id, updates: user } })
       } else {
-        const user = await usersApi.create({ ...form })
+        const user = await usersApi.create({ ...form, locationId })
         dispatch({ type: 'ADD_USER', payload: { user } })
       }
       setShowModal(false)
@@ -195,13 +198,32 @@ export function Users() {
             <input
                id="users-email" type="email" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className="field-input" placeholder="name@medcrm.in" />
           </div>
-          <div>
-            <label className="field-label" htmlFor="users-role">Role</label>
-            <select
-               id="users-role" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as UserRole }))} className="field-input">
-              <option value="caller">Caller</option>
-              <option value="admin">Admin</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="field-label" htmlFor="users-role">Role</label>
+              <select
+                 id="users-role" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as UserRole }))} className="field-input">
+                <option value="caller">Caller</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            {/* A caller sells from this location; admins have none, so the field is theirs only. */}
+            {form.role === 'caller' && (
+              <div>
+                <label className="field-label" htmlFor="users-location">Location</label>
+                <select
+                  id="users-location"
+                  value={form.locationId}
+                  onChange={(e) => setForm((f) => ({ ...f, locationId: e.target.value }))}
+                  className="field-input"
+                >
+                  <option value="">— none yet —</option>
+                  {state.locations.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <div>
             <label className="field-label" htmlFor="users-editinguser-reset-password-optional-password">{editingUser ? 'Reset Password (optional)' : 'Password'}</label>

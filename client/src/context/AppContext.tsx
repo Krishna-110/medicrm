@@ -10,6 +10,7 @@ import { renewalsApi } from '@/api/renewals';
 import { followUpsApi } from '@/api/followUps';
 import { notificationsApi } from '@/api/notifications';
 import { miscApi } from '@/api/misc';
+import { locationsApi } from '@/api/locations';
 import { getToken, setToken, clearToken } from '@/api/client';
 
 const initialState: AppState = {
@@ -22,12 +23,13 @@ const initialState: AppState = {
   notifications: [],
   medicines: [],
   dashboard: null,
+  locations: [],
   searchQuery: '',
   booting: true,
 };
 
 export async function loadAll(dispatch: Dispatch<AppAction>) {
-  const [users, leads, orders, renewals, followUps, notifications, medicines, dashboard] = await Promise.all([
+  const [users, leads, orders, renewals, followUps, notifications, medicines, dashboard, locations] = await Promise.all([
     usersApi.list(),
     leadsApi.list(),
     ordersApi.list(),
@@ -36,10 +38,11 @@ export async function loadAll(dispatch: Dispatch<AppAction>) {
     notificationsApi.list(),
     medicinesApi.list(),
     miscApi.dashboard(),
+    locationsApi.list(),
   ]);
   dispatch({
     type: 'HYDRATE',
-    payload: { users, leads, orders, renewals, followUps, notifications, medicines, dashboard },
+    payload: { users, leads, orders, renewals, followUps, notifications, medicines, dashboard, locations },
   });
 }
 
@@ -195,6 +198,17 @@ function appReducer(state: AppState, action: AppAction): AppState {
           lead.id === action.payload.leadId
             ? { ...lead, medicines: [...lead.medicines, action.payload.medicine] }
             : lead,
+        ),
+      };
+
+    case 'ADD_LOCATION':
+      return { ...state, locations: [...state.locations, action.payload.location] };
+
+    case 'UPDATE_LOCATION':
+      return {
+        ...state,
+        locations: state.locations.map((l) =>
+          l.id === action.payload.id ? { ...l, ...action.payload.updates } : l,
         ),
       };
 
