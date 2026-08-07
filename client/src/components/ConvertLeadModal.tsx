@@ -73,10 +73,12 @@ export function ConvertLeadModal({
   // still have no unit price set, which bills exactly as badly as one that is missing.
   const unpriced = preview?.items.filter(i => i.lineTotal === 0) ?? []
   const notListed = unpriced.filter(i => !i.inCatalogue)
-  // Days are units, so a line the catalogue can't cover blocks the sale — the server refuses
-  // it too, but catching it here means the user isn't asked for a screenshot first.
-  const short = preview?.items.filter(i => !i.covered) ?? []
-  const canSubmit = !!preview && !!screenshot && !discountInvalid && short.length === 0 && !submitting
+  // Days are units, so a line the caller's location can't cover blocks the sale — the server
+  // refuses it too, but catching it here means the user isn't asked for a screenshot first.
+  const noLocation = !!preview && preview.locationName === null
+  const short = noLocation ? [] : (preview?.items.filter(i => !i.covered) ?? [])
+  const canSubmit =
+    !!preview && !noLocation && !!screenshot && !discountInvalid && short.length === 0 && !submitting
 
   async function handleConfirm() {
     if (!lead || !canSubmit) return
@@ -134,11 +136,21 @@ export function ConvertLeadModal({
               </div>
             ))}
           </div>
+          {noLocation && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-danger-600">
+              <AlertTriangle size={14} className="mt-px shrink-0" />
+              <span>
+                This lead’s caller has no location, so there is nowhere to sell from. An admin
+                must assign one before converting.
+              </span>
+            </p>
+          )}
           {short.length > 0 && (
             <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-danger-600">
               <AlertTriangle size={14} className="mt-px shrink-0" />
               <span>
-                Not enough stock to fulfil{' '}
+                Not enough stock at{' '}
+                <span className="font-semibold">{preview?.locationName}</span> to fulfil{' '}
                 {short.map(i => i.name).join(', ')}. Ask an admin to update the stock before converting.
               </span>
             </p>

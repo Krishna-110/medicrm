@@ -311,23 +311,9 @@ leadsRouter.post(
 leadsRouter.get(
   '/:id/convert-preview',
   route(async (req, res) => {
-    const { lines, totalAmount } = await previewConversion(actorOf(req), param(req, 'id'));
-    res.json({
-      items: lines.map((l) => ({
-        name: l.name,
-        quantity: l.quantity,
-        unitPrice: Number(l.unitPrice),
-        lineTotal: Number(l.lineTotal),
-        // Flagged so the dialog can say why a line is priced at zero, rather than showing a
-        // free medicine and leaving the user to wonder.
-        inCatalogue: l.productId !== null,
-        // Stock, and whether it covers the days. Lets the dialog warn and block before the
-        // user uploads a screenshot, rather than only on the server's rejection.
-        stock: l.stock,
-        covered: l.stock === null || l.stock >= l.quantity,
-      })),
-      totalAmount: Number(totalAmount),
-    });
+    // previewConversion already shapes items, stock coverage against the seller's location,
+    // and the location name, so the route just forwards it.
+    res.json(await previewConversion(actorOf(req), param(req, 'id')));
   }),
 );
 

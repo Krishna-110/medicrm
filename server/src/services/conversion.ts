@@ -7,6 +7,7 @@ import { addDays } from '../lib/dates.js';
 import { isAdmin, type Actor } from '../auth/scope.js';
 import { findCatalogueProductByName } from './catalogue.js';
 import { lineTotal, nextOrderNumber, payableAmount } from './orders.js';
+import { changeStock, resolveSellerLocation, stockAt } from './inventory.js';
 import { auditCreate, auditUpdate } from './audit.js';
 
 /**
@@ -53,8 +54,6 @@ export type QuoteLine = {
   lineTotal: Prisma.Decimal;
   /** Days of supply; equal to quantity, and what decides when the renewal falls due. */
   days: number;
-  /** Units currently in the catalogue, or null when the medicine is not one. */
-  stock: number | null;
 };
 
 /**
@@ -107,8 +106,6 @@ export async function quoteLead(
       unitPrice,
       lineTotal: total_,
       days: item.days,
-      // Null for a free-text medicine with no catalogue product — nothing to check against.
-      stock: product ? product.stockQuantity : null,
     });
   }
   return { lines, totalAmount };
@@ -165,7 +162,35 @@ export async function previewConversion(actor: Actor, leadId: string) {
   if (lead.status === 'converted') {
     throw ApiError.badRequest('This lead has already been converted');
   }
-  return quoteLead(prisma, lead);
+
+  const { lines, totalAmount } = await quoteLead(prisma, lead);
+
+  // Stock is checked against the seller's location — the lead's assigned caller's — not a
+  // global total. Resolved softly so the dialog can explain a missing caller or location
+  // rather than the whole preview failing; the conversion itself enforces it hard.
+  const caller = lead.assignedCallerId
+    ? await prisma.user.findUnique({ where: { id: lead.assignedCallerId }, select: { locationId: true, location: { select: { name: true } } } })
+    : null;
+  const locationId = caller?.locationId ?? null;
+  const locationName = caller?.location?.name ?? null;
+
+  const items = await Promise.all(
+    lines.map(async (l) => {
+      const stock = l.productId && locationId ? await stockAt(prisma, l.productId, locationId) : null;
+      return {
+        name: l.name,
+        quantity: l.quantity,
+        unitPrice: Number(l.unitPrice),
+        lineTotal: Number(l.lineTotal),
+        inCatalogue: l.productId !== null,
+        stock,
+        // No location means nothing is coverable; the dialog blocks on locationName === null.
+        covered: locationId === null ? false : stock === null || stock >= l.quantity,
+      };
+    }),
+  );
+
+  return { items, totalAmount: Number(totalAmount), locationName };
 }
 
 export type ConversionInput = {
@@ -197,6 +222,10 @@ export async function convertLeadToOrder(
 
   return prisma.$transaction(async (tx) => {
     const lead = await loadConvertibleLead(tx, actor, leadId);
+
+    // The location this sale draws from — the lead's caller's. Resolved up front so a lead
+    // with no caller or a caller with no location is refused before any writes.
+    const sellerLocationId = await resolveSellerLocation(tx, lead.assignedCallerId);
 
     // ── 1. resolve or create the customer ────────────────────────────────────────────────
     // Deduped on the normalised mobile, so "+91 98765 43210" and "09876543210" find the same
@@ -258,10 +287,12 @@ export async function convertLeadToOrder(
     // Priced by the same function that produced the preview the user just approved.
     const { lines, totalAmount } = await quoteLead(tx, lead, fallbackUnitPrice);
 
-    // Every catalogue line must be coverable before anything is written, so a shortfall
-    // rejects the whole order rather than half-filling it.
+    // Every catalogue line must be coverable at the seller's location before anything is
+    // written, so a shortfall rejects the whole order rather than half-filling it.
     for (const line of lines) {
-      if (line.stock !== null) assertStockCovers(line.name, line.stock, line.quantity);
+      if (line.productId) {
+        assertStockCovers(line.name, await stockAt(tx, line.productId, sellerLocationId), line.quantity);
+      }
     }
 
     for (const line of lines) {
@@ -276,16 +307,9 @@ export async function convertLeadToOrder(
         },
       });
 
-      // Deducts the units sold. Coverage was asserted above, so this cannot go negative; the
-      // Math.max is a belt-and-braces floor, not the policy it used to be.
+      // Deducts the units from the seller's location. Coverage was asserted above.
       if (line.productId) {
-        const product = await tx.product.findUnique({ where: { id: line.productId } });
-        if (product) {
-          await tx.product.update({
-            where: { id: product.id },
-            data: { stockQuantity: Math.max(product.stockQuantity - line.quantity, 0) },
-          });
-        }
+        await changeStock(tx, line.productId, sellerLocationId, -line.quantity);
       }
 
       // One renewal per medicine, due when that medicine runs out.

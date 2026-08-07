@@ -18,6 +18,8 @@ export type ConversionPreviewItem = {
 export type ConversionPreview = {
   items: ConversionPreviewItem[]
   totalAmount: number
+  /** The caller's location the sale draws from, or null when none is assigned. */
+  locationName: string | null
 }
 
 export type ConvertPayload = {

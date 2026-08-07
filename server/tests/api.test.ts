@@ -461,6 +461,51 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(after.filter((r: { status: string }) => r.status !== 'renewed')).toHaveLength(1);
   });
 
+  it('a sale deducts from the caller’s location, and no other', async () => {
+    // The point of the whole feature: a caller sells from their assigned location only. A
+    // caller at West, a lead of theirs — converting it must draw from West and leave Main
+    // Store alone, even though the same medicine sits at both.
+    const main = (await as(admin).get('/api/locations')).body.find((l: { name: string }) => l.name === 'Main Store');
+    const { body: west } = await as(admin).post('/api/locations', { name: `West ${nextId()}` });
+    const atorva = (await as(admin).get('/api/medicines')).body.find((m: { name: string }) => m.name === 'Atorva');
+
+    await as(admin).post(`/api/medicines/${atorva.id}/stock`, { mode: 'set', quantity: 100, locationId: main.id });
+    await as(admin).post(`/api/medicines/${atorva.id}/stock`, { mode: 'set', quantity: 100, locationId: west.id });
+
+    const stockAt = async (locationId: string) => {
+      const m = (await as(admin).get('/api/medicines')).body.find((x: { id: string }) => x.id === atorva.id);
+      return m.locations.find((s: { locationId: string }) => s.locationId === locationId)?.quantity ?? 0;
+    };
+
+    // A caller assigned to West sells from West.
+    const { body: westCaller } = await as(admin).post('/api/users', {
+      name: 'West Caller', employeeId: `WC${nextId()}`, phone: '9000000222',
+      email: `west${nextId()}@medicrm.in`, role: 'caller', locationId: west.id,
+    });
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: westCaller.id,
+      medicines: [{ name: 'Atorva', days: 30 }],
+    }));
+    expect((await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload())).status).toBe(200);
+
+    expect(await stockAt(west.id)).toBe(70); // 100 - 30, the caller's location
+    expect(await stockAt(main.id)).toBe(100); // untouched
+  });
+
+  it('a caller with no location cannot sell — the sale is refused', async () => {
+    const { body: noLoc } = await as(admin).post('/api/users', {
+      name: 'No Location', employeeId: `NL${nextId()}`, phone: '9000000123',
+      email: `noloc${nextId()}@medicrm.in`, role: 'caller',
+    });
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: noLoc.id }));
+
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/no location/i);
+    // Nothing was written — the lead is still convertible once a location is set.
+    expect((await as(admin).get(`/api/leads/${lead.id}`)).body.status).not.toBe('converted');
+  });
+
   it('refuses a conversion the catalogue cannot cover, and touches nothing', async () => {
     // Days are units, so a 50-day order needs 50 in stock. Below that the whole order is
     // rejected — the old behaviour fulfilled anyway and floored stock at zero. Admin is the
@@ -475,9 +520,11 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(res.status).toBe(400);
     expect(String(res.body.error)).toMatch(/ask an admin to update the stock/i);
 
-    // Whole order refused: stock unchanged and the lead is still convertible.
-    const stock = (await as(admin).get('/api/medicines')).body.find((m: { name: string }) => m.name === 'Atorva').stockQuantity;
-    expect(stock).toBe(10);
+    // Whole order refused: the caller's location stock is unchanged and the lead is still
+    // convertible. Checked at Main Store — the caller's location — not the cross-location total.
+    const atorva = (await as(admin).get('/api/medicines')).body.find((m: { name: string }) => m.name === 'Atorva');
+    const mainStock = atorva.locations.find((s: { locationName: string }) => s.locationName === 'Main Store')?.quantity;
+    expect(mainStock).toBe(10);
     const after = await as(admin).get(`/api/leads/${lead.id}`);
     expect(after.body.status).not.toBe('converted');
   });

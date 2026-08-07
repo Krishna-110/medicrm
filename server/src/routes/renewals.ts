@@ -7,6 +7,7 @@ import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { assertStockCovers } from '../services/conversion.js';
+import { changeStock, resolveSellerLocation, stockAt } from '../services/inventory.js';
 import { lineTotal, nextOrderNumber, payableAmount } from '../services/orders.js';
 import { auditCreate } from '../services/audit.js';
 import { addDays, istDayDiff } from '../lib/dates.js';
@@ -90,6 +91,8 @@ renewalsRouter.post(
       const previousOrder = renewed.orderId
         ? await tx.order.findUnique({ where: { id: renewed.orderId }, select: { leadId: true } })
         : null;
+      // The reorder draws from the renewal's caller's location, the same as a conversion.
+      const sellerLocationId = await resolveSellerLocation(tx, renewed.assignedCallerId);
       // Priced before the order is written, so totalAmount is right on insert rather than
       // patched afterwards. The renewal's own medicine uses its stored product link; anything
       // added in the dialog is matched by name, exactly as the lead form does.
@@ -107,10 +110,12 @@ renewalsRouter.post(
         priced.push({ ...line, product, unitPrice, amount });
       }
 
-      // Every catalogue line must be coverable before anything is written — same rule as a
-      // conversion, so a shortfall rejects the whole reorder rather than half-filling it.
+      // Every catalogue line must be coverable at the seller's location before anything is
+      // written — same rule as a conversion, so a shortfall rejects the whole reorder.
       for (const line of priced) {
-        if (line.product) assertStockCovers(line.name, line.product.stockQuantity, line.quantity);
+        if (line.product) {
+          assertStockCovers(line.name, await stockAt(tx, line.product.id, sellerLocationId), line.quantity);
+        }
       }
 
       const created = await tx.order.create({
@@ -148,12 +153,9 @@ renewalsRouter.post(
           },
         });
 
-        // Deducts the units sold; coverage was asserted above so this cannot go negative.
+        // Deducts the units from the seller's location; coverage was asserted above.
         if (line.product) {
-          await tx.product.update({
-            where: { id: line.product.id },
-            data: { stockQuantity: Math.max(line.product.stockQuantity - line.quantity, 0) },
-          });
+          await changeStock(tx, line.product.id, sellerLocationId, -line.quantity);
         }
       }
       await auditCreate(tx, actorOf(req), 'orders', created);

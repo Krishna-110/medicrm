@@ -174,7 +174,10 @@ async function main() {
       update: { quantity: stockQuantity },
     });
   }
-  console.log('  stock placed at Main Store');
+  // Every caller sells from a location; the seeded ones all work out of Main Store, so a
+  // conversion in the fixture has somewhere to draw stock from.
+  await prisma.user.updateMany({ where: { role: 'caller' }, data: { locationId: mainStore.id } });
+  console.log('  stock placed at Main Store, callers assigned to it');
 
   // ── pipeline ───────────────────────────────────────────────────────────────────────────
   const sneha = users['sneha.iyer@medicrm.in']!;

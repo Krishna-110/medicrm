@@ -1,13 +1,31 @@
 import { Router } from 'express';
-import { prisma } from '../db/prisma.js';
+import { prisma, type Tx } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route } from '../lib/errors.js';
 import { requireAdmin } from '../auth/scope.js';
 import { serializeMedicine } from '../lib/serialize.js';
+import { changeStock, setStock } from '../services/inventory.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
 
 export const medicinesRouter = Router();
+
+/** A medicine with its per-location breakdown, for a response the Stock page can expand. */
+const WITH_STOCK = {
+  locationStocks: { where: { location: { deletedAt: null } }, include: { location: true } },
+} as const;
+
+/** The location a stock change targets: the one asked for, or Main Store when none is given. */
+async function targetLocation(tx: Tx, locationId: unknown): Promise<string> {
+  if (typeof locationId === 'string' && locationId) {
+    const loc = await tx.location.findFirst({ where: { id: locationId, deletedAt: null }, select: { id: true } });
+    if (!loc) throw ApiError.badRequest('Unknown location');
+    return loc.id;
+  }
+  const main = await tx.location.findFirst({ where: { name: 'Main Store', deletedAt: null }, select: { id: true } });
+  if (!main) throw ApiError.badRequest('No default location exists — create one first');
+  return main.id;
+}
 
 /** The catalogue is shared reference data — every authenticated user reads it in full. */
 medicinesRouter.get(
@@ -48,12 +66,15 @@ medicinesRouter.post(
           brandName: body.name,
           dosageForm: body.dosageForm ?? null,
           unitPrice: Number(body.unitPrice) || 0,
-          stockQuantity: opening,
+          stockQuantity: 0,
           isActive: body.isActive ?? true,
         },
       });
+      // Opening stock lands at a location — the one chosen, else Main Store — and setStock
+      // refreshes the cached total from there. The column is no longer set directly.
+      if (opening > 0) await setStock(tx, created.id, await targetLocation(tx, body.locationId), opening);
       await auditCreate(tx, actor, 'products', created);
-      return created;
+      return tx.product.findUniqueOrThrow({ where: { id: created.id }, include: WITH_STOCK });
     });
     res.status(201).json(serializeMedicine(product));
   }),
@@ -81,7 +102,7 @@ medicinesRouter.patch(
     const product = await prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({ where: { id }, data });
       await auditUpdate(tx, actor, 'products', before, updated);
-      return updated;
+      return tx.product.findUniqueOrThrow({ where: { id }, include: WITH_STOCK });
     });
     res.json(serializeMedicine(product));
   }),
@@ -112,13 +133,13 @@ medicinesRouter.post(
     if (!before) throw ApiError.notFound('Medicine not found');
 
     const product = await prisma.$transaction(async (tx) => {
-      const updated = await tx.product.update({
-        where: { id },
-        // `increment` rather than read-then-write, so two concurrent additions cannot lose one.
-        data: { stockQuantity: mode === 'add' ? { increment: quantity } : quantity },
-      });
+      const locationId = await targetLocation(tx, req.body?.locationId);
+      // add increments that location; set makes it absolute. Both refresh the cached total.
+      if (mode === 'add') await changeStock(tx, id, locationId, quantity);
+      else await setStock(tx, id, locationId, quantity);
+      const updated = await tx.product.findUniqueOrThrow({ where: { id } });
       await auditUpdate(tx, actor, 'products', before, updated);
-      return updated;
+      return tx.product.findUniqueOrThrow({ where: { id }, include: WITH_STOCK });
     });
     res.json(serializeMedicine(product));
   }),
