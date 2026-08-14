@@ -515,15 +515,32 @@ export function Stock() {
                     {units.toLocaleString('en-IN')} units · {callers} caller{callers === 1 ? '' : 's'}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={!deletable || deletingLoc === loc.id}
-                  onClick={() => handleDeleteLocation(loc.id)}
-                  title={deletable ? 'Delete location' : 'Clear its stock and reassign its callers first'}
-                  className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-400"
-                >
-                  <Trash2 size={16} />
-                </button>
+                {/*
+                  * Deletable: a plainly visible red Delete. Blocked: say what is in the way,
+                  * in words. A dimmed icon on its own was the wrong answer — at 40% of an
+                  * already-light grey it read as nothing being there at all.
+                  */}
+                {deletable ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    icon={<Trash2 size={14} />}
+                    loading={deletingLoc === loc.id}
+                    disabled={deletingLoc === loc.id}
+                    onClick={() => handleDeleteLocation(loc.id)}
+                  >
+                    Delete
+                  </Button>
+                ) : (
+                  <span className="shrink-0 text-right text-xs text-ink-500">
+                    {units > 0 && callers > 0
+                      ? 'Clear its stock and reassign its callers to delete'
+                      : units > 0
+                        ? 'Set its stock to 0 to delete'
+                        : `Reassign its ${callers} caller${callers === 1 ? '' : 's'} to delete`}
+                  </span>
+                )}
               </div>
             )
           })}
