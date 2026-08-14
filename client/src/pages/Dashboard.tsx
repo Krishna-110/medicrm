@@ -24,7 +24,7 @@ import { Modal } from '@/components/ui/Modal'
 import { followUpsApi } from '@/api/followUps'
 import { emitToast } from '@/lib/toast'
 import { istToday } from '@/lib/dateUtils'
-import type { LeadStatus } from '@/types'
+import type { Lead, LeadStatus } from '@/types'
 
 function formatRupees(amount: number) {
   return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
@@ -107,16 +107,27 @@ export function Dashboard() {
   /*
    * A customer is a lead that actually bought. Two statuses mean that: 'converted' is set by
    * the convert-to-order flow, 'sold' is the manual equivalent (it demands a payment
-   * screenshot). Counting both is what makes the number match the list underneath it.
+   * screenshot).
+   *
+   * One person, one row: a repeat buyer has a converted lead per purchase, so the rows are
+   * deduplicated by mobile — normalised on write, which is what makes it usable as an
+   * identity. Leads arrive newest-first, so the first match kept is that person's most
+   * recent record, and their address and alternate number are the current ones.
    *
    * Derived from the leads already in the store rather than a new endpoint — they arrive
    * with the app and are already scoped, so a caller counts their own customers and an admin
    * counts everyone's, with no extra request.
    */
-  const customers = useMemo(
-    () => state.leads.filter((l) => l.status === 'converted' || l.status === 'sold'),
-    [state.leads],
-  )
+  const customers = useMemo(() => {
+    const byPerson = new Map<string, Lead>()
+    for (const lead of state.leads) {
+      if (lead.status !== 'converted' && lead.status !== 'sold') continue
+      // Falling back to the id keeps a blank mobile from collapsing every such lead into one.
+      const identity = lead.mobile?.trim() || lead.id
+      if (!byPerson.has(identity)) byPerson.set(identity, lead)
+    }
+    return [...byPerson.values()]
+  }, [state.leads])
 
   // Follow-ups are already loaded and already scoped to the signed-in caller, so "my tasks"
   // is a filter, not a fetch. Overdue first: yesterday's missed call matters more than a
@@ -466,7 +477,7 @@ export function Dashboard() {
         isOpen={showCustomers}
         onClose={() => setShowCustomers(false)}
         title="Customers"
-        description={`${customers.length} customer${customers.length === 1 ? '' : 's'} — leads that converted or were marked sold`}
+        description={`${customers.length} unique customer${customers.length === 1 ? '' : 's'} — repeat purchases counted once`}
         size="xl"
       >
         {customers.length === 0 ? (
