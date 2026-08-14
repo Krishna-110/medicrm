@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
+  UserCheck,
   Phone,
   Clock,
   ShoppingCart,
@@ -19,6 +20,7 @@ import { Badge } from '@/components/ui/Badge'
 import { LeadStatusBadge } from '@/components/ui/StatusBadge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { followUpsApi } from '@/api/followUps'
 import { emitToast } from '@/lib/toast'
 import { istToday } from '@/lib/dateUtils'
@@ -98,8 +100,23 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 export function Dashboard() {
   const { state, dispatch } = useApp()
   const navigate = useNavigate()
+  const [showCustomers, setShowCustomers] = useState(false)
 
   const dashboard = state.dashboard
+
+  /*
+   * A customer is a lead that actually bought. Two statuses mean that: 'converted' is set by
+   * the convert-to-order flow, 'sold' is the manual equivalent (it demands a payment
+   * screenshot). Counting both is what makes the number match the list underneath it.
+   *
+   * Derived from the leads already in the store rather than a new endpoint — they arrive
+   * with the app and are already scoped, so a caller counts their own customers and an admin
+   * counts everyone's, with no extra request.
+   */
+  const customers = useMemo(
+    () => state.leads.filter((l) => l.status === 'converted' || l.status === 'sold'),
+    [state.leads],
+  )
 
   // Follow-ups are already loaded and already scoped to the signed-in caller, so "my tasks"
   // is a filter, not a fetch. Overdue first: yesterday's missed call matters more than a
@@ -140,8 +157,20 @@ export function Dashboard() {
   const salesByCaller = dashboard?.salesByCaller ?? []
   const maxCallerSales = Math.max(...salesByCaller.map((c) => c.totalSales), 1)
 
-  const statCards = [
+  type StatCard = {
+    label: string
+    value: number
+    icon: typeof Users
+    tint: string
+    change: string
+    positive: boolean
+    /** Present on cards that open a detail view; those render as a button. */
+    onClick?: () => void
+  }
+
+  const statCards: StatCard[] = [
     { label: 'Total Leads', value: dashboard?.totalLeads ?? 0, icon: Users, tint: 'from-primary-500 to-primary-600', change: '+12%', positive: true },
+    { label: 'Total Customers', value: customers.length, icon: UserCheck, tint: 'from-emerald-500 to-emerald-600', change: '+15%', positive: true, onClick: () => setShowCustomers(true) },
     { label: "Today's Calls", value: dashboard?.todaysCalls ?? 0, icon: Phone, tint: 'from-teal-500 to-teal-600', change: '+8%', positive: true },
     { label: 'Pending Follow-ups', value: dashboard?.pendingFollowUps ?? 0, icon: Clock, tint: 'from-warning-500 to-warning-600', change: '-5%', positive: false },
     { label: 'Converted Orders', value: dashboard?.totalOrders ?? 0, icon: ShoppingCart, tint: 'from-success-500 to-success-600', change: '+18%', positive: true },
@@ -216,14 +245,12 @@ export function Dashboard() {
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {statCards.map((card) => {
           const Icon = card.icon
-          return (
-            <div
-              key={card.label}
-              className="group relative overflow-hidden rounded-2xl border border-ink-200/80 bg-white p-5 shadow-[var(--shadow-card)] transition-all duration-200 hover:shadow-[var(--shadow-card-hover)]"
-            >
+          const base = 'group relative overflow-hidden rounded-2xl border border-ink-200/80 bg-white p-5 shadow-[var(--shadow-card)] transition-all duration-200 hover:shadow-[var(--shadow-card-hover)]'
+          const inner = (
+            <>
               <div className="flex items-start justify-between">
                 <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${card.tint} shadow-sm`}>
                   <Icon className="h-[22px] w-[22px] text-white" />
@@ -235,6 +262,22 @@ export function Dashboard() {
               </div>
               <p className="mt-4 text-3xl font-bold tracking-tight text-ink-900">{card.value}</p>
               <p className="mt-0.5 text-sm text-ink-500">{card.label}</p>
+            </>
+          )
+          // A real button when it opens something, so it is reachable by keyboard.
+          return card.onClick ? (
+            <button
+              key={card.label}
+              type="button"
+              onClick={card.onClick}
+              className={`${base} cursor-pointer text-left hover:border-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2`}
+            >
+              {inner}
+              <span className="mt-1 block text-[11px] font-medium text-emerald-600">View all →</span>
+            </button>
+          ) : (
+            <div key={card.label} className={base}>
+              {inner}
             </div>
           )
         })}
@@ -417,6 +460,55 @@ export function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* The customer list behind the Total Customers card. Rows open the full lead record. */}
+      <Modal
+        isOpen={showCustomers}
+        onClose={() => setShowCustomers(false)}
+        title="Customers"
+        description={`${customers.length} customer${customers.length === 1 ? '' : 's'} — leads that converted or were marked sold`}
+        size="xl"
+      >
+        {customers.length === 0 ? (
+          <p className="py-8 text-center text-sm text-ink-400">
+            No customers yet. A lead becomes one when it is converted to an order or marked sold.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink-100 bg-ink-50/50">
+                  {['Name', 'Mobile', 'Alternate', 'Address', 'City', 'State', 'Pincode'].map((h, i) => (
+                    <th
+                      key={h}
+                      className={`whitespace-nowrap py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400 ${i === 0 ? 'pl-1 pr-3' : 'px-3'}`}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => (
+                  <tr
+                    key={c.id}
+                    onClick={() => { setShowCustomers(false); navigate(`/leads/${c.id}`) }}
+                    className="cursor-pointer border-b border-ink-50 transition-colors last:border-0 hover:bg-primary-50/30"
+                  >
+                    <td className="py-3 pl-1 pr-3 font-medium text-ink-900">{c.customerName}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-ink-600">{c.mobile}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-ink-600">{c.alternateNumber || '-'}</td>
+                    <td className="px-3 py-3 text-ink-600">{c.address || '-'}</td>
+                    <td className="px-3 py-3 text-ink-600">{c.city || '-'}</td>
+                    <td className="px-3 py-3 text-ink-600">{c.state || '-'}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-ink-600">{c.pincode || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
