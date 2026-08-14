@@ -212,6 +212,15 @@ leadsRouter.patch(
     if (typeof data.mobile === 'string') data.mobile = normalizeIndianMobile(data.mobile);
     if ('assignedCaller' in body) data.assignedCallerId = body.assignedCaller ?? null;
 
+    // Becoming a customer by hand is stamped the same way the conversion flow stamps it.
+    // Only on the transition in, so re-saving a lead that already sold does not move the
+    // date; and cleared on the way back out, so a status set in error leaves nothing behind.
+    const SOLD_STATUSES = new Set(['converted', 'sold']);
+    if ('status' in body && targetStatus !== before.status) {
+      if (SOLD_STATUSES.has(targetStatus)) data.convertedAt = new Date();
+      else if (SOLD_STATUSES.has(before.status)) data.convertedAt = null;
+    }
+
     const lead = await prisma.$transaction(async (tx) => {
       const updated = await tx.lead.update({ where: { id: before.id }, data });
 

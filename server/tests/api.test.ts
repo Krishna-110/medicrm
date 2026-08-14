@@ -702,6 +702,38 @@ describe('follow-up scheduling stays in step with the lead', () => {
   });
 });
 
+describe('conversion is dated', () => {
+  it('stamps convertedDate when a lead converts, and leaves it blank before', async () => {
+    await setStock('Atorva', 999);
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    // A live lead has not sold, so it carries no date.
+    expect(lead.convertedDate).toBe('');
+
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const { body: after } = await as(admin).get(`/api/leads/${lead.id}`);
+    expect(after.status).toBe('converted');
+    // Dated the day it converted — not merely non-empty, which a stray createdAt would satisfy.
+    expect(after.convertedDate).toBe(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+  });
+
+  it('stamps a lead marked sold by hand, and clears it if the status is taken back', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const sold = await as(admin).patch(`/api/leads/${lead.id}`, {
+      status: 'sold',
+      address: '1 Test Street',
+      pincode: '400001',
+      paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
+    });
+    expect(sold.status).toBe(200);
+    expect(sold.body.convertedDate).not.toBe('');
+
+    // Set in error and taken back: the date must not linger, or the lead would keep counting
+    // as a customer that never was.
+    const undone = await as(admin).patch(`/api/leads/${lead.id}`, { status: 'interested' });
+    expect(undone.body.convertedDate).toBe('');
+  });
+});
+
 describe('location deletion', () => {
   it('deletes an empty location, and it drops out of the list', async () => {
     const { body: loc } = await as(admin).post('/api/locations', { name: `Empty ${nextId()}` });

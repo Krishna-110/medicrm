@@ -72,6 +72,8 @@ export type Lead = {
   createdDate: string;
   lastFollowUp?: string;
   nextFollowUp?: string;
+  /** When the lead became a customer; '' until it converts or is marked sold. */
+  convertedDate?: string;
   notes?: string;
   paymentScreenshot?: string;
   activities: LeadActivity[];

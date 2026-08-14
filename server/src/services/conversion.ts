@@ -347,7 +347,9 @@ export async function convertLeadToOrder(
     // ── 4. close the lead ────────────────────────────────────────────────────────────────
     const converted = await tx.lead.update({
       where: { id: lead.id },
-      data: { status: 'converted' },
+      // convertedAt is stamped here, in the same transaction as the order, so the moment the
+      // lead became a customer is recorded rather than inferred from its dates later.
+      data: { status: 'converted', convertedAt: new Date() },
     });
     await auditUpdate(tx, actor, 'leads', lead, converted);
 

@@ -132,9 +132,10 @@ export function Dashboard() {
   /*
    * How many customers converted today / this week / this month.
    *
-   * The lead carries no "converted at" column, but its order does: conversion writes the
-   * order and flips the status in one transaction, so the order's date IS the moment of
-   * conversion. A lead marked 'sold' by hand raises no order, so its own date stands in.
+   * convertedDate is stamped by the server the moment a lead becomes a customer, so this
+   * reads the fact rather than inferring it. createdDate is only a fallback for a row that
+   * predates the column and somehow escaped the backfill; it is the wrong date to count on
+   * — capture can precede the sale by months — which is exactly why the column exists.
    *
    * Counted per person, not per purchase — someone who bought twice this week is one
    * customer — and the boundaries mirror the server's periodBoundaries(): IST, week from
@@ -142,14 +143,6 @@ export function Dashboard() {
    * directly as strings.
    */
   const convertedByPeriod = useMemo(() => {
-    const conversionDate = new Map<string, string>()
-    for (const order of state.orders) {
-      if (!order.leadId) continue
-      const seen = conversionDate.get(order.leadId)
-      // Earliest order wins: later ones are that customer's reorders, not their conversion.
-      if (!seen || order.createdDate < seen) conversionDate.set(order.leadId, order.createdDate)
-    }
-
     const today = istToday()
     const weekStart = istWeekStart()
     const thisMonth = today.slice(0, 7)
@@ -159,7 +152,7 @@ export function Dashboard() {
 
     for (const lead of state.leads) {
       if (lead.status !== 'converted' && lead.status !== 'sold') continue
-      const on = conversionDate.get(lead.id) ?? lead.createdDate
+      const on = lead.convertedDate || lead.createdDate
       if (!on) continue
       const identity = lead.mobile?.trim() || lead.id
       if (on === today) inToday.add(identity)
@@ -167,7 +160,7 @@ export function Dashboard() {
       if (on.slice(0, 7) === thisMonth) inMonth.add(identity)
     }
     return { today: inToday.size, thisWeek: inWeek.size, thisMonth: inMonth.size }
-  }, [state.leads, state.orders])
+  }, [state.leads])
 
   // Follow-ups are already loaded and already scoped to the signed-in caller, so "my tasks"
   // is a filter, not a fetch. Overdue first: yesterday's missed call matters more than a

@@ -80,6 +80,7 @@ type Lead = {
   doctorName: string | null; disease: string; assignedCallerId: string | null;
   leadSource: string; status: string; createdAt: Date;
   lastFollowUpAt: Date | null; nextFollowUpAt: Date | null;
+  convertedAt: Date | null;
   notes: string | null; paymentScreenshot: string | null;
   medicines?: LeadMedicine[]; activities?: LeadActivity[];
 };
@@ -102,6 +103,8 @@ export const serializeLead = (l: Lead) => ({
   createdDate: d10(l.createdAt),
   lastFollowUp: d10(l.lastFollowUpAt),
   nextFollowUp: d10(l.nextFollowUpAt),
+  // '' until the lead sells, matching how every other optional date here renders.
+  convertedDate: d10(l.convertedAt),
   notes: l.notes ?? undefined,
   paymentScreenshot: l.paymentScreenshot ?? undefined,
   activities: (l.activities ?? []).map(serializeLeadActivity),

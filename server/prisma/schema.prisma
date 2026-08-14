@@ -306,6 +306,11 @@ model Lead {
   status           String    @default("new")
   lastFollowUpAt   DateTime? @map("last_follow_up_at")
   nextFollowUpAt   DateTime? @map("next_follow_up_at")
+  /// When this lead became a customer — set on the transition into 'converted' or 'sold',
+  /// null while it is neither. Stored rather than derived: createdAt is when the lead was
+  /// captured, which can be months before the sale, and an order's date only exists for a
+  /// conversion that raised one.
+  convertedAt      DateTime? @map("converted_at")
   notes            String?
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
@@ -327,6 +332,7 @@ model Lead {
   @@index([customerId])
   @@index([mobile])
   @@index([createdAt])
+  @@index([convertedAt])
   @@map("leads")
 }
 
