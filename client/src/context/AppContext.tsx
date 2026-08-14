@@ -74,6 +74,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'HYDRATE':
       return { ...state, ...action.payload, booting: false };
 
+    // The server-computed figures on their own, refreshed after the data behind them moves.
+    case 'SET_DASHBOARD':
+      return { ...state, dashboard: action.payload.dashboard };
+
     case 'SET_BOOTING':
       return { ...state, booting: action.payload.booting };
 

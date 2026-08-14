@@ -206,6 +206,7 @@ export type AppAction =
   | { type: 'LOGIN'; payload: { user: User } }
   | { type: 'LOGOUT' }
   | { type: 'HYDRATE'; payload: HydratePayload }
+  | { type: 'SET_DASHBOARD'; payload: { dashboard: DashboardStats } }
   | { type: 'SET_BOOTING'; payload: { booting: boolean } }
   | { type: 'ADD_LEAD'; payload: { lead: Lead } }
   | { type: 'UPDATE_LEAD'; payload: { id: string; updates: Partial<Lead> } }

@@ -1,14 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Users,
   UserCheck,
-  Phone,
   Clock,
   ShoppingCart,
   RefreshCw,
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
   CalendarRange,
   IndianRupee,
@@ -22,6 +19,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { followUpsApi } from '@/api/followUps'
+import { miscApi } from '@/api/misc'
 import { emitToast } from '@/lib/toast'
 import { istToday, istWeekStart } from '@/lib/dateUtils'
 import type { Lead, LeadStatus } from '@/types'
@@ -103,6 +101,31 @@ export function Dashboard() {
   const [showCustomers, setShowCustomers] = useState(false)
 
   const dashboard = state.dashboard
+
+  /*
+   * Keep the server-computed figures current.
+   *
+   * They are fetched once at sign-in, so every one of them went stale the moment anything
+   * changed: converting a lead left "Converted Orders" on its old value, and completing a
+   * follow-up left "Pending Follow-ups" untouched, until a full page reload. Refetching when
+   * the underlying collections change costs one request per action and makes every card on
+   * this page agree with the rest of the app — including on arriving here from another page.
+   */
+  useEffect(() => {
+    if (state.booting) return
+    let cancelled = false
+    miscApi
+      .dashboard()
+      .then((fresh) => {
+        if (!cancelled) dispatch({ type: 'SET_DASHBOARD', payload: { dashboard: fresh } })
+      })
+      // Silent: the figures on screen are merely stale, which is not worth a toast on every
+      // dropped request — the next change refetches anyway.
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [state.booting, state.leads, state.orders, state.followUps, state.renewals, dispatch])
 
   /*
    * A customer is a lead that actually bought. Two statuses mean that: 'converted' is set by
@@ -206,19 +229,22 @@ export function Dashboard() {
     value: number
     icon: typeof Users
     tint: string
-    change: string
-    positive: boolean
     /** Present on cards that open a detail view; those render as a button. */
     onClick?: () => void
   }
 
+  /*
+   * No trend badges. They were hardcoded strings — every card claimed a fixed "+12%" or
+   * "-5%" that never moved whatever the data did. A number nobody computed is worse than
+   * no number, so they are gone rather than faked; a real one needs the previous period
+   * stored to compare against.
+   */
   const statCards: StatCard[] = [
-    { label: 'Total Leads', value: dashboard?.totalLeads ?? 0, icon: Users, tint: 'from-primary-500 to-primary-600', change: '+12%', positive: true },
-    { label: 'Total Customers', value: customers.length, icon: UserCheck, tint: 'from-emerald-500 to-emerald-600', change: '+15%', positive: true, onClick: () => setShowCustomers(true) },
-    { label: "Today's Calls", value: dashboard?.todaysCalls ?? 0, icon: Phone, tint: 'from-teal-500 to-teal-600', change: '+8%', positive: true },
-    { label: 'Pending Follow-ups', value: dashboard?.pendingFollowUps ?? 0, icon: Clock, tint: 'from-warning-500 to-warning-600', change: '-5%', positive: false },
-    { label: 'Converted Orders', value: dashboard?.totalOrders ?? 0, icon: ShoppingCart, tint: 'from-success-500 to-success-600', change: '+18%', positive: true },
-    { label: 'Renewals Due', value: dashboard?.renewalsDue ?? 0, icon: RefreshCw, tint: 'from-danger-500 to-danger-600', change: '+3%', positive: false },
+    { label: 'Total Leads', value: dashboard?.totalLeads ?? 0, icon: Users, tint: 'from-primary-500 to-primary-600' },
+    { label: 'Total Customers', value: customers.length, icon: UserCheck, tint: 'from-emerald-500 to-emerald-600', onClick: () => setShowCustomers(true) },
+    { label: 'Pending Follow-ups', value: dashboard?.pendingFollowUps ?? 0, icon: Clock, tint: 'from-warning-500 to-warning-600' },
+    { label: 'Converted Orders', value: dashboard?.totalOrders ?? 0, icon: ShoppingCart, tint: 'from-success-500 to-success-600' },
+    { label: 'Renewals Due', value: dashboard?.renewalsDue ?? 0, icon: RefreshCw, tint: 'from-danger-500 to-danger-600' },
   ]
 
   const getUserName = (userId?: string) => {
@@ -289,20 +315,14 @@ export function Dashboard() {
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {statCards.map((card) => {
           const Icon = card.icon
           const base = 'group relative overflow-hidden rounded-2xl border border-ink-200/80 bg-white p-5 shadow-[var(--shadow-card)] transition-all duration-200 hover:shadow-[var(--shadow-card-hover)]'
           const inner = (
             <>
-              <div className="flex items-start justify-between">
-                <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${card.tint} shadow-sm`}>
-                  <Icon className="h-[22px] w-[22px] text-white" />
-                </div>
-                <div className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${card.positive ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-700'}`}>
-                  {card.positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {card.change}
-                </div>
+              <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${card.tint} shadow-sm`}>
+                <Icon className="h-[22px] w-[22px] text-white" />
               </div>
               <p className="mt-4 text-3xl font-bold tracking-tight text-ink-900">{card.value}</p>
               <p className="mt-0.5 text-sm text-ink-500">{card.label}</p>
