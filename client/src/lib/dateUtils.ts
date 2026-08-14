@@ -13,6 +13,21 @@ export function istToday(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
 }
 
+/**
+ * Monday of the current IST week as YYYY-MM-DD, matching the server's periodBoundaries()
+ * so a client-side "this week" means the same span as the dashboard's own figures.
+ *
+ * The arithmetic runs in UTC on purpose: it starts from the IST calendar date, so shifting
+ * days in UTC cannot slip into a neighbouring day the way the local timezone could.
+ */
+export function istWeekStart(): string {
+  const [y, m, d] = istToday().split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  const mondayIndex = (date.getUTCDay() + 6) % 7 // 0 = Monday
+  date.setUTCDate(date.getUTCDate() - mondayIndex)
+  return date.toISOString().slice(0, 10)
+}
+
 function parseToDate(input: string | Date | null | undefined): Date | null {
   if (!input) return null
   if (input instanceof Date) return isNaN(input.getTime()) ? null : input

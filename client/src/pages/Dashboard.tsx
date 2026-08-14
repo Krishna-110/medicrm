@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { followUpsApi } from '@/api/followUps'
 import { emitToast } from '@/lib/toast'
-import { istToday } from '@/lib/dateUtils'
+import { istToday, istWeekStart } from '@/lib/dateUtils'
 import type { Lead, LeadStatus } from '@/types'
 
 function formatRupees(amount: number) {
@@ -128,6 +128,46 @@ export function Dashboard() {
     }
     return [...byPerson.values()]
   }, [state.leads])
+
+  /*
+   * How many customers converted today / this week / this month.
+   *
+   * The lead carries no "converted at" column, but its order does: conversion writes the
+   * order and flips the status in one transaction, so the order's date IS the moment of
+   * conversion. A lead marked 'sold' by hand raises no order, so its own date stands in.
+   *
+   * Counted per person, not per purchase — someone who bought twice this week is one
+   * customer — and the boundaries mirror the server's periodBoundaries(): IST, week from
+   * Monday, month from the 1st. Dates are IST YYYY-MM-DD on both sides, so they compare
+   * directly as strings.
+   */
+  const convertedByPeriod = useMemo(() => {
+    const conversionDate = new Map<string, string>()
+    for (const order of state.orders) {
+      if (!order.leadId) continue
+      const seen = conversionDate.get(order.leadId)
+      // Earliest order wins: later ones are that customer's reorders, not their conversion.
+      if (!seen || order.createdDate < seen) conversionDate.set(order.leadId, order.createdDate)
+    }
+
+    const today = istToday()
+    const weekStart = istWeekStart()
+    const thisMonth = today.slice(0, 7)
+    const inToday = new Set<string>()
+    const inWeek = new Set<string>()
+    const inMonth = new Set<string>()
+
+    for (const lead of state.leads) {
+      if (lead.status !== 'converted' && lead.status !== 'sold') continue
+      const on = conversionDate.get(lead.id) ?? lead.createdDate
+      if (!on) continue
+      const identity = lead.mobile?.trim() || lead.id
+      if (on === today) inToday.add(identity)
+      if (on >= weekStart) inWeek.add(identity)
+      if (on.slice(0, 7) === thisMonth) inMonth.add(identity)
+    }
+    return { today: inToday.size, thisWeek: inWeek.size, thisMonth: inMonth.size }
+  }, [state.leads, state.orders])
 
   // Follow-ups are already loaded and already scoped to the signed-in caller, so "my tasks"
   // is a filter, not a fetch. Overdue first: yesterday's missed call matters more than a
@@ -294,8 +334,8 @@ export function Dashboard() {
         })}
       </div>
 
-      {/* Leads / Sales period breakdown */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* Leads / Customers / Sales period breakdown */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <PeriodBreakdown
           icon={CalendarRange}
           tint="from-primary-500 to-primary-600"
@@ -303,6 +343,14 @@ export function Dashboard() {
           today={dashboard?.leadsByPeriod.today ?? 0}
           thisWeek={dashboard?.leadsByPeriod.thisWeek ?? 0}
           thisMonth={dashboard?.leadsByPeriod.thisMonth ?? 0}
+        />
+        <PeriodBreakdown
+          icon={UserCheck}
+          tint="from-emerald-500 to-emerald-600"
+          title="Customers Converted"
+          today={convertedByPeriod.today}
+          thisWeek={convertedByPeriod.thisWeek}
+          thisMonth={convertedByPeriod.thisMonth}
         />
         <PeriodBreakdown
           icon={IndianRupee}
