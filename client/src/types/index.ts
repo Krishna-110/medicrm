@@ -158,8 +158,9 @@ export type Notification = {
 
 export type DashboardStats = {
   totalLeads: number;
-  todaysCalls: number;
+  /** Follow-up records still pending — not leads sitting in a follow_up_pending status. */
   pendingFollowUps: number;
+  /** Every order, reorders from renewals included; the card is labelled Total Orders. */
   totalOrders: number;
   renewalsDue: number;
   leadStatusBreakdown: { status: LeadStatus; count: number }[];

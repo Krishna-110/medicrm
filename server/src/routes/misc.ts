@@ -52,12 +52,14 @@ miscRouter.get(
       Number((await db.order.aggregate({ _sum: { totalAmount: true }, where }))._sum.totalAmount ?? 0);
 
     const [
-      totalLeads, todaysCalls, pendingFollowUps, totalOrders, renewalsDue,
+      totalLeads, pendingFollowUps, totalOrders, renewalsDue,
       leadsToday, leadsWeek, leadsMonth, salesToday, salesWeek, salesMonth, grouped,
     ] = await Promise.all([
       db.lead.count({ where: live }),
-      db.followUp.count({ where: { ...live, scheduledAt: { gte: today, lt: tomorrow } } }),
-      db.lead.count({ where: { ...live, status: 'follow_up_pending' } }),
+      // The follow-ups themselves, not leads parked in a follow_up_pending status. Those are
+      // different numbers — a lead can have calls booked without carrying that status — and
+      // counting the status meant a day full of scheduled calls still reported zero.
+      db.followUp.count({ where: { ...live, status: 'pending' } }),
       db.order.count({ where: live }),
       // "Due" is not-yet-renewed and the renewal date has arrived. Overdue is subsumed:
       // a renewal cannot expire before its renewal date.
@@ -138,7 +140,6 @@ miscRouter.get(
 
     res.json({
       totalLeads,
-      todaysCalls,
       pendingFollowUps,
       totalOrders,
       renewalsDue,

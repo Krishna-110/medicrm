@@ -184,6 +184,25 @@ describe('dashboard', () => {
     expect(sum).toBe(after.totalLeads);
   });
 
+  it('pendingFollowUps counts follow-ups, not leads parked in a status', async () => {
+    // The bug this pins: it counted leads whose status was follow_up_pending, so booking a
+    // call on a lead in any other status moved nothing and a full day could report zero.
+    const before = (await as(admin).get('/api/dashboard')).body.pendingFollowUps;
+
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    expect(lead.status).not.toBe('follow_up_pending');
+    await as(admin).post(`/api/leads/${lead.id}/follow-ups`, { scheduledDate: '2026-12-01' });
+
+    const after = (await as(admin).get('/api/dashboard')).body.pendingFollowUps;
+    expect(after).toBe(before + 1);
+
+    // And completing it takes the count back down.
+    const mine = (await as(admin).get('/api/follow-ups')).body
+      .find((f: { leadId?: string; status: string }) => f.leadId === lead.id && f.status === 'pending');
+    await as(admin).patch(`/api/follow-ups/${mine.id}`, { status: 'completed' });
+    expect((await as(admin).get('/api/dashboard')).body.pendingFollowUps).toBe(before);
+  });
+
   it('caller totals are smaller, and cross-caller comparisons are admin-only', async () => {
     const [a, c] = await Promise.all([as(admin).get('/api/dashboard'), as(caller).get('/api/dashboard')]);
     expect(c.body.totalLeads).toBeLessThan(a.body.totalLeads);

@@ -243,7 +243,7 @@ export function Dashboard() {
     { label: 'Total Leads', value: dashboard?.totalLeads ?? 0, icon: Users, tint: 'from-primary-500 to-primary-600' },
     { label: 'Total Customers', value: customers.length, icon: UserCheck, tint: 'from-emerald-500 to-emerald-600', onClick: () => setShowCustomers(true) },
     { label: 'Pending Follow-ups', value: dashboard?.pendingFollowUps ?? 0, icon: Clock, tint: 'from-warning-500 to-warning-600' },
-    { label: 'Converted Orders', value: dashboard?.totalOrders ?? 0, icon: ShoppingCart, tint: 'from-success-500 to-success-600' },
+    { label: 'Total Orders', value: dashboard?.totalOrders ?? 0, icon: ShoppingCart, tint: 'from-success-500 to-success-600' },
     { label: 'Renewals Due', value: dashboard?.renewalsDue ?? 0, icon: RefreshCw, tint: 'from-danger-500 to-danger-600' },
   ]
 
