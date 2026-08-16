@@ -140,6 +140,8 @@ export type Renewal = {
 export type FollowUp = {
   id: string;
   leadId?: string;
+  /** Set when this is a renewal reminder; lets the renewal find its own pending one. */
+  renewalId?: string;
   customerName: string;
   scheduledDate: string;
   type: 'call' | 'reminder' | 'callback';

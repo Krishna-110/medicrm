@@ -205,12 +205,15 @@ export const serializeRenewal = (r: Renewal) => ({
 });
 
 type FollowUp = {
-  id: string; leadId: string | null; customerName: string; scheduledAt: Date;
-  type: string; status: string; notes: string | null;
+  id: string; leadId: string | null; renewalId: string | null; customerName: string;
+  scheduledAt: Date; type: string; status: string; notes: string | null;
 };
 export const serializeFollowUp = (f: FollowUp) => ({
   id: f.id,
   leadId: f.leadId ?? undefined,
+  // Which renewal this reminder belongs to. Without it the client cannot tell that a renewal
+  // already has a reminder, so the dialog could only ever offer the renewal date back.
+  renewalId: f.renewalId ?? undefined,
   customerName: f.customerName,
   scheduledDate: d10(f.scheduledAt),
   type: f.type as FollowUpType,

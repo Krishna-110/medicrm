@@ -104,10 +104,17 @@ export function Renewals() {
 
   function openReminder(renewal: Renewal) {
     setRemindingRenewal(renewal)
-    // Defaults to the day the medicine runs out — the day the call is worth making. The
-    // button used to schedule for today regardless, which for a renewal three weeks out put
-    // a task on the caller's list three weeks early.
-    setReminderDate(renewal.renewalDate)
+    // The reminder already set, if there is one. Reopening used to reset the field to the
+    // renewal date unconditionally, so a reminder moved to another day appeared to have
+    // reverted — the change had saved, the dialog simply never showed it back.
+    //
+    // Falls back to the day the medicine runs out, which is the day the call is worth
+    // making. (The button once scheduled for today regardless, putting a task on the
+    // caller's list three weeks early for a renewal three weeks out.)
+    const existing = state.followUps.find(
+      f => f.renewalId === renewal.id && f.status === 'pending',
+    )
+    setReminderDate(existing?.scheduledDate ?? renewal.renewalDate)
   }
 
   async function handleScheduleReminder() {

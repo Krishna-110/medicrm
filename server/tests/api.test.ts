@@ -721,6 +721,33 @@ describe('follow-up scheduling stays in step with the lead', () => {
   });
 });
 
+describe('renewal reminders', () => {
+  it('moves the existing reminder to the new date and says which renewal it is for', async () => {
+    await setStock('Atorva', 999);
+    const before = new Set((await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id));
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body.filter((r: { id: string }) => !before.has(r.id));
+
+    // First reminder, on a date of its own rather than the renewal date.
+    const first = await as(admin).post(`/api/renewals/${renewal.id}/remind`, { scheduledDate: '2026-09-05' });
+    expect(first.body.scheduledDate).toBe('2026-09-05');
+    // renewalId is what lets the client find this reminder again; without it the dialog can
+    // only offer the renewal date back and a moved reminder looks like it never saved.
+    expect(first.body.renewalId).toBe(renewal.id);
+
+    // Moving it edits that same reminder rather than stacking a second one.
+    const moved = await as(admin).post(`/api/renewals/${renewal.id}/remind`, { scheduledDate: '2026-09-20' });
+    expect(moved.body.id).toBe(first.body.id);
+    expect(moved.body.scheduledDate).toBe('2026-09-20');
+
+    const reminders = (await as(admin).get('/api/follow-ups')).body
+      .filter((f: { renewalId?: string }) => f.renewalId === renewal.id);
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0].scheduledDate).toBe('2026-09-20');
+  });
+});
+
 describe('conversion is dated', () => {
   it('stamps convertedDate when a lead converts, and leaves it blank before', async () => {
     await setStock('Atorva', 999);
