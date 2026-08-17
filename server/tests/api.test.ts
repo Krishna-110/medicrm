@@ -761,6 +761,34 @@ describe('payment mode', () => {
     expect(String(online.body.error)).toMatch(/screenshot/i);
   });
 
+  it('a renewal follows the same rule — cash reorders without a screenshot', async () => {
+    await setStock('Atorva', 999);
+    const before = new Set((await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id));
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body.filter((r: { id: string }) => !before.has(r.id));
+
+    // Online still demands the proof.
+    const online = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
+      items: [{ name: 'Atorva', days: 30 }],
+      paymentMode: 'online',
+      paymentScreenshot: '',
+    });
+    expect(online.status).toBe(400);
+    expect(String(online.body.error)).toMatch(/screenshot/i);
+
+    // Cash does not, and the order records how it was paid.
+    const offline = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
+      items: [{ name: 'Atorva', days: 30 }],
+      paymentMode: 'offline',
+      paymentScreenshot: '',
+    });
+    expect(offline.status).toBe(200);
+    expect(offline.body.order.paymentMode).toBe('offline');
+    expect(offline.body.order.paymentScreenshot).toBeUndefined();
+    expect(offline.body.order.paymentStatus).toBe('paid');
+  });
+
   it('defaults to online, so an unspecified mode still demands proof', async () => {
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
     const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({ paymentScreenshot: '' }));

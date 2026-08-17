@@ -41,6 +41,7 @@ export function RenewOrderModal({
   const [rows, setRows] = useState<Row[]>([])
   const [discountType, setDiscountType] = useState<DiscountType>('none')
   const [discountValue, setDiscountValue] = useState('')
+  const [paymentMode, setPaymentMode] = useState<'online' | 'offline'>('online')
   const [screenshot, setScreenshot] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -59,6 +60,7 @@ export function RenewOrderModal({
     )
     setDiscountType('none')
     setDiscountValue('')
+    setPaymentMode('online')
     setScreenshot('')
     setSubmitting(false)
   }, [renewal?.id, renewal?.medicineName, renewal?.orderDate, renewal?.renewalDate])
@@ -101,7 +103,8 @@ export function RenewOrderModal({
 
   const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const canSubmit =
-    rows.length > 0 && !rowsInvalid && short.length === 0 && !discountInvalid && !!screenshot && !submitting
+    rows.length > 0 && !rowsInvalid && short.length === 0 && !discountInvalid &&
+    (paymentMode === 'offline' || !!screenshot) && !submitting
 
   const setRow = (id: string, patch: Partial<Row>) =>
     setRows(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r)))
@@ -112,7 +115,9 @@ export function RenewOrderModal({
     try {
       const result = await renewalsApi.renew(renewal.id, {
         items: lines.map(l => ({ name: l.name.trim(), days: l.days })),
-        paymentScreenshot: screenshot,
+        paymentMode,
+        // Deliberately blank for a cash sale rather than carrying a stale image across.
+        paymentScreenshot: paymentMode === 'offline' ? '' : screenshot,
         discountType,
         discountValue: raw,
       })
@@ -283,6 +288,33 @@ export function RenewOrderModal({
           </p>
         )}
 
+        {/* Same rule as a first sale: only a transfer has a screenshot to give. */}
+        <div>
+          <span className="field-label">Payment mode</span>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { value: 'online', label: 'Online', hint: 'Transfer — needs proof' },
+              { value: 'offline', label: 'Offline', hint: 'Cash or card in person' },
+            ] as const).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPaymentMode(opt.value)}
+                aria-pressed={paymentMode === opt.value}
+                className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                  paymentMode === opt.value
+                    ? 'border-primary-500 bg-primary-50 text-primary-800'
+                    : 'border-ink-200 text-ink-600 hover:bg-ink-50'
+                }`}
+              >
+                <span className="block text-sm font-medium">{opt.label}</span>
+                <span className="block text-[11px] text-ink-500">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {paymentMode === 'online' && (
         <div>
           <label className="field-label" htmlFor="renew-screenshot">
             Payment Screenshot <span className="text-danger-500">*</span>
@@ -310,6 +342,7 @@ export function RenewOrderModal({
             </p>
           )}
         </div>
+        )}
 
         <div className="flex justify-end gap-3 border-t border-ink-100 pt-3">
           <Button type="button" variant="secondary" onClick={onClose}>
