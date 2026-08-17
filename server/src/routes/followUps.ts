@@ -40,6 +40,14 @@ followUpsRouter.patch(
       data.scheduledAt = when;
     }
     if ('type' in body) data.type = body.type;
+
+    // When the call was actually made, stamped on the way in and cleared on the way back out.
+    // Only on a real transition, so re-saving a completed follow-up does not move the date.
+    if ('status' in body && body.status !== before.status) {
+      if (body.status === 'completed') data.completedAt = new Date();
+      else if (before.status === 'completed') data.completedAt = null;
+    }
+
     if (Object.keys(data).length === 0) throw ApiError.badRequest('no updatable fields provided');
 
     const { followUp, lead } = await prisma.$transaction(async (tx) => {

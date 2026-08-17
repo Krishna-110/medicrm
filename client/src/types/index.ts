@@ -162,6 +162,8 @@ export type Notification = {
 
 export type DashboardStats = {
   totalLeads: number;
+  /** Calls completed today, by when they were made — not by when they were scheduled. */
+  callsDoneToday: number;
   /** Follow-up records still pending — not leads sitting in a follow_up_pending status. */
   pendingFollowUps: number;
   /** Every order, reorders from renewals included; the card is labelled Total Orders. */

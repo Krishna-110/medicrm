@@ -189,6 +189,28 @@ describe('dashboard', () => {
     expect(sum).toBe(after.totalLeads);
   });
 
+  it('callsDoneToday counts calls made, not calls scheduled', async () => {
+    // The distinction the card was pulled over: a call booked for today has not been made,
+    // and a call made today against an old booking still counts.
+    const before = (await as(admin).get('/api/dashboard')).body.callsDoneToday;
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+
+    // Booked for today, not yet dialled — must not count.
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    await as(admin).post(`/api/leads/${lead.id}/follow-ups`, { scheduledDate: today });
+    expect((await as(admin).get('/api/dashboard')).body.callsDoneToday).toBe(before);
+
+    // Scheduled long ago, completed now — must count, on today.
+    const { body: old } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const backlog = await as(admin).post(`/api/leads/${old.id}/follow-ups`, { scheduledDate: '2026-01-05' });
+    await as(admin).patch(`/api/follow-ups/${backlog.body.id}`, { status: 'completed' });
+    expect((await as(admin).get('/api/dashboard')).body.callsDoneToday).toBe(before + 1);
+
+    // Undone, and it stops counting — the stamp is cleared, not merely ignored.
+    await as(admin).patch(`/api/follow-ups/${backlog.body.id}`, { status: 'pending' });
+    expect((await as(admin).get('/api/dashboard')).body.callsDoneToday).toBe(before);
+  });
+
   it('pendingFollowUps counts follow-ups, not leads parked in a status', async () => {
     // The bug this pins: it counted leads whose status was follow_up_pending, so booking a
     // call on a lead in any other status moved nothing and a full day could report zero.

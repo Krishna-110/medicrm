@@ -52,10 +52,17 @@ miscRouter.get(
       Number((await db.order.aggregate({ _sum: { totalAmount: true }, where }))._sum.totalAmount ?? 0);
 
     const [
-      totalLeads, pendingFollowUps, totalOrders, renewalsDue,
+      totalLeads, callsDoneToday, pendingFollowUps, totalOrders, renewalsDue,
       leadsToday, leadsWeek, leadsMonth, salesToday, salesWeek, salesMonth, grouped,
     ] = await Promise.all([
       db.lead.count({ where: live }),
+      // Calls actually made today, by when they were completed. The old figure counted
+      // follow-ups SCHEDULED for today, which reported calls nobody had dialled yet and
+      // missed a backlog cleared today — the reason the card was pulled rather than left
+      // lying until the column existed to answer it.
+      db.followUp.count({
+        where: { ...live, status: 'completed', completedAt: { gte: today, lt: tomorrow } },
+      }),
       // The follow-ups themselves, not leads parked in a follow_up_pending status. Those are
       // different numbers — a lead can have calls booked without carrying that status — and
       // counting the status meant a day full of scheduled calls still reported zero.
@@ -140,6 +147,7 @@ miscRouter.get(
 
     res.json({
       totalLeads,
+      callsDoneToday,
       pendingFollowUps,
       totalOrders,
       renewalsDue,
