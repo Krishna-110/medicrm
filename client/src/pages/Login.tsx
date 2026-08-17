@@ -5,7 +5,7 @@ import { login } from '@/context/AppContext'
 import { takeFlashMessage } from '@/api/client'
 import { emitToast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
-import { Plus, Shield, Phone, ArrowRight, Activity, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Shield, Phone, ArrowRight, Activity, CheckCircle2, AlertCircle } from 'lucide-react'
 
 const demoAccounts = [
   { email: 'aarav.sharma@medicrm.in', password: 'admin123', role: 'Admin', icon: Shield, color: 'bg-warning-50 text-warning-600' },
@@ -58,10 +58,7 @@ export function Login() {
         />
 
         <div className="relative flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-            <Plus className="h-5 w-5 text-white" strokeWidth={3} />
-          </div>
-          <span className="text-lg font-bold">MediCRM</span>
+          <img src="/logo.png" alt="Abhyasa Crm" className="h-10 w-auto rounded-lg bg-[#1b1c1c] px-1.5 py-1" />
         </div>
 
         <p className="relative mt-4 max-w-xs text-[15px] font-medium leading-snug text-primary-100">
@@ -106,10 +103,7 @@ export function Login() {
         />
 
         <div className="relative flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
-            <Plus className="h-6 w-6 text-white" strokeWidth={3} />
-          </div>
-          <span className="text-xl font-bold">MediCRM</span>
+          <img src="/logo.png" alt="Abhyasa Crm" className="h-[68px] w-auto rounded-xl bg-[#1b1c1c] px-3 py-2" />
         </div>
 
         <div className="relative">
@@ -227,7 +221,7 @@ export function Login() {
             ))}
           </div>
 
-          <p className="mt-8 text-center text-xs text-ink-400">MediCRM v1.0 — Medical Distribution CRM</p>
+          <p className="mt-8 text-center text-xs text-ink-400">Abhyasa Crm v1.0 — Medical Distribution CRM</p>
         </div>
       </div>
     </div>

@@ -7,7 +7,7 @@ import { prisma } from './db/prisma.js';
 // Vite dev server here. concurrently passes that same env to this process too, so reading
 // PORT would silently steal Vite's port and break the /api proxy, which is hardcoded to 3001.
 const port = Number(process.env.API_PORT ?? 3001);
-const server = app.listen(port, () => console.log(`MediCRM API listening on http://localhost:${port}`));
+const server = app.listen(port, () => console.log(`Abhyasa Crm API listening on http://localhost:${port}`));
 
 /** Finish in-flight requests before dropping the database connection. */
 async function shutdown(signal: string) {

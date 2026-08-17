@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Package,
   UserCog,
-  Plus,
   X,
 } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
@@ -128,13 +127,16 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex h-16 items-center gap-2.5 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 shadow-sm shadow-primary-600/30">
-            <Plus className="h-5 w-5 text-white" strokeWidth={3} />
-          </div>
-          <div className="leading-tight">
-            <div className="text-[15px] font-bold text-ink-900">MediCRM</div>
-            <div className="text-[11px] font-medium text-ink-400">Distribution Suite</div>
-          </div>
+          {/*
+            * The artwork carries its own near-black backdrop and its "ayurveda" line is white,
+            * so it is framed on that same colour rather than dropped onto the white sidebar,
+            * where the lower word would simply disappear.
+            */}
+          <img
+            src="/logo.png"
+            alt="Abhyasa Crm"
+            className="h-10 w-auto rounded-lg bg-[#1b1c1c] px-1.5 py-1"
+          />
           <button
             onClick={onClose}
             className="ml-auto rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 lg:hidden"
