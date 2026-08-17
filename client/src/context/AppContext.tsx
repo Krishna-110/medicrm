@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useReducer } from 'react';
+import { useLocation } from 'react-router-dom';
 import type { ReactNode, Dispatch } from 'react';
 import type { AppState, AppAction } from '@/types';
 import { authApi } from '@/api/auth';
@@ -250,6 +251,46 @@ const AppContext = createContext<
 
 function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+  const { pathname } = useLocation();
+
+  /*
+   * Reload the collections on navigation and whenever the tab comes back to the front.
+   *
+   * Everything used to be fetched once at sign-in and never again, which left the store
+   * drifting from the database in two ways. A write can have consequences the response does
+   * not carry — saving a lead's next follow-up date creates a follow-up row, converting a
+   * lead raises a renewal — and neither reached the store, so the Calendar and Renewals
+   * pages showed yesterday's answer until the page was reloaded by hand. And nothing another
+   * user did could ever arrive at all.
+   *
+   * Refetching at these two moments covers both without a socket or a polling loop: the data
+   * is fresh whenever a page is opened, and fresh again after attention returns to the app.
+   */
+  useEffect(() => {
+    // Skipped during boot, which is already loading everything.
+    if (state.booting || !getToken()) return;
+    loadAll(dispatch).catch(() => {
+      // Stale data beats a toast on every navigation; the next one tries again.
+    });
+    // Deliberately keyed on the path alone — re-running whenever `booting` settles would
+    // just repeat the load the boot sequence has already done.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && getToken()) {
+        loadAll(dispatch).catch(() => {});
+      }
+    };
+    // Both, because a phone switching apps reports visibility rather than focus.
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   useEffect(() => {
     async function boot() {
