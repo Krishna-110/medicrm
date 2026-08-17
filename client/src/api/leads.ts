@@ -15,6 +15,8 @@ export type ConversionPreview = {
 }
 
 export type ConvertPayload = {
+  /** 'online' carries a screenshot as proof; 'offline' is cash in hand and has none. */
+  paymentMode: 'online' | 'offline'
   paymentScreenshot: string
   /** The sale itself: medicine and tenure per line, chosen in the dialog. */
   items: { name: string; days: number }[]

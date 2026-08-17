@@ -5,11 +5,11 @@
  */
 export type {
   DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
-  LeadStatus, NotificationType, OrderStage, PaymentStatus, RenewalStatus, UserRole, UserStatus,
+  LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, RenewalStatus, UserRole, UserStatus,
 } from '../../../server/src/lib/vocab.js';
 import type {
   DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
-  LeadStatus, NotificationType, OrderStage, PaymentStatus, RenewalStatus, UserRole,
+  LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, RenewalStatus, UserRole,
 } from '../../../server/src/lib/vocab.js';
 
 
@@ -115,6 +115,8 @@ export type Order = {
   discountValue: number;
   payableAmount: number;
   paymentStatus: PaymentStatus;
+  /** How it was paid. An offline sale carries no screenshot, which is not an omission. */
+  paymentMode: PaymentMode;
   paymentScreenshot?: string;
   stage: OrderStage;
   createdDate: string;

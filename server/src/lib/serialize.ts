@@ -1,6 +1,6 @@
 import type {
   DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
-  LeadStatus, NotificationType, OrderStage, PaymentStatus, UserRole, UserStatus,
+  LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, UserRole, UserStatus,
 } from './vocab.js';
 import { Prisma } from '@prisma/client';
 import { APP_TIMEZONE, daysRemaining, renewalStatus } from './dates.js';
@@ -153,7 +153,7 @@ type Order = {
   id: string; orderNumber: string; leadId: string | null; customerName: string;
   shippingAddress: string; totalAmount: Prisma.Decimal; discountType: string;
   discountValue: Prisma.Decimal; payableAmount: Prisma.Decimal; paymentStatus: string;
-  stage: string; paymentScreenshot: string | null;
+  paymentMode: string; stage: string; paymentScreenshot: string | null;
   createdAt: Date; updatedAt: Date; items?: OrderItem[];
 };
 export const serializeOrder = (o: Order) => ({
@@ -168,6 +168,8 @@ export const serializeOrder = (o: Order) => ({
   discountValue: num(o.discountValue),
   payableAmount: num(o.payableAmount),
   paymentStatus: o.paymentStatus as PaymentStatus,
+  // How it was paid; an offline sale carries no screenshot, which is not an omission.
+  paymentMode: o.paymentMode as PaymentMode,
   // Proof of payment for this order. It was stored and never exposed, so every renewal
   // demanded a screenshot that nobody could then look at.
   paymentScreenshot: o.paymentScreenshot ?? undefined,

@@ -399,6 +399,10 @@ model Order {
   /// single screenshot however many orders that lead goes on to produce — so a renewal's
   /// payment had nowhere to go except on top of the original sale's.
   paymentScreenshot String?    @map("payment_screenshot")
+  /// How the money arrived: 'online' carries a screenshot as proof, 'offline' is cash or a
+  /// card taken in person and has none to give. Defaults to online because every order that
+  /// existed before this column had to supply a screenshot to be created at all.
+  paymentMode     String       @default("online") @map("payment_mode")
   /// Sum of live line totals, recomputed by the order service.
   totalAmount     Decimal      @default(0) @map("total_amount") @db.Decimal(14, 2)
   discountType    DiscountType @default(none) @map("discount_type")

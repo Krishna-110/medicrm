@@ -734,6 +734,40 @@ describe('follow-up scheduling stays in step with the lead', () => {
   });
 });
 
+describe('payment mode', () => {
+  it('an offline sale converts without a screenshot; an online one still cannot', async () => {
+    await setStock('Atorva', 999);
+
+    // Cash over the counter leaves no image, so demanding one meant inventing a picture to
+    // record a sale that plainly happened.
+    const { body: cashLead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const offline = await as(admin).post(`/api/leads/${cashLead.id}/convert`, convertPayload({
+      paymentMode: 'offline',
+      paymentScreenshot: '',
+    }));
+    expect(offline.status).toBe(200);
+    expect(offline.body.order.paymentMode).toBe('offline');
+    expect(offline.body.order.paymentScreenshot).toBeUndefined();
+    // Still a completed sale, just without the picture.
+    expect(offline.body.order.paymentStatus).toBe('paid');
+
+    // A transfer does leave one, so the proof is still demanded.
+    const { body: onlineLead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const online = await as(admin).post(`/api/leads/${onlineLead.id}/convert`, convertPayload({
+      paymentMode: 'online',
+      paymentScreenshot: '',
+    }));
+    expect(online.status).toBe(400);
+    expect(String(online.body.error)).toMatch(/screenshot/i);
+  });
+
+  it('defaults to online, so an unspecified mode still demands proof', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({ paymentScreenshot: '' }));
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('pincode', () => {
   it('is optional everywhere — a lead records and sells without one', async () => {
     // Taken down over the phone, a pincode often is not known yet. Refusing the lead for it

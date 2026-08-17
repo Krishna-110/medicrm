@@ -343,6 +343,7 @@ leadsRouter.post(
       param(req, 'id'),
       {
         paymentScreenshot: body.paymentScreenshot,
+        paymentMode: body.paymentMode,
         // The sale as composed in the dialog. Leads no longer carry medicines, so this is the
         // only source for what is being bought.
         items: Array.isArray(body.items) ? body.items : [],

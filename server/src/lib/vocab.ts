@@ -54,6 +54,8 @@ export type OrderStage =
   | 'delivered';
 
 export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded';
+/** How the money arrived. Only an online transfer leaves a screenshot to be required. */
+export type PaymentMode = 'online' | 'offline';
 export type DiscountType = 'none' | 'flat' | 'percentage';
 
 export type RenewalStatus = 'upcoming' | 'due_today' | 'overdue' | 'renewed';

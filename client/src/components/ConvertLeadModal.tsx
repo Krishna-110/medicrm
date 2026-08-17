@@ -9,6 +9,7 @@ import { emitToast } from '@/lib/toast'
 import type { Lead } from '@/types'
 
 type DiscountType = ConvertPayload['discountType']
+type PaymentMode = ConvertPayload['paymentMode']
 
 /** The tenures sold. One unit per day, so tenure is both the supply period and the quantity. */
 const TENURES = [15, 30, 60, 90] as const
@@ -46,6 +47,7 @@ export function ConvertLeadModal({
   const [preview, setPreview] = useState<ConversionPreview | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [lines, setLines] = useState<SaleLine[]>([emptyLine()])
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('online')
   const [discountType, setDiscountType] = useState<DiscountType>('none')
   const [discountValue, setDiscountValue] = useState('')
   const [screenshot, setScreenshot] = useState('')
@@ -57,6 +59,7 @@ export function ConvertLeadModal({
     setPreview(null)
     setLoadError(null)
     setLines([emptyLine()])
+    setPaymentMode('online')
     setDiscountType('none')
     setDiscountValue('')
     setScreenshot('')
@@ -119,14 +122,16 @@ export function ConvertLeadModal({
   const short = noLocation ? [] : chosen.filter(p => p.medicine && !p.covered)
   const canSubmit =
     !!preview && !noLocation && chosen.length > 0 && unknown.length === 0 &&
-    !!screenshot && !discountInvalid && short.length === 0 && !submitting
+    (paymentMode === 'offline' || !!screenshot) && !discountInvalid && short.length === 0 && !submitting
 
   async function handleConfirm() {
     if (!lead || !canSubmit) return
     setSubmitting(true)
     try {
       onConverted(await leadsApi.convert(lead.id, {
-        paymentScreenshot: screenshot,
+        paymentMode,
+        // Deliberately blank for a cash sale rather than carrying a stale image across.
+        paymentScreenshot: paymentMode === 'offline' ? '' : screenshot,
         items: chosen.map(p => ({ name: p.name.trim(), days: p.days })),
         discountType,
         discountValue: discountType === 'none' ? 0 : raw,
@@ -287,7 +292,37 @@ export function ConvertLeadModal({
           </div>
         </div>
 
-        {/* Payment proof — the conversion is refused without it, server-side too. */}
+        {/*
+          * How it was paid. Only a transfer leaves a screenshot behind, so only a transfer can
+          * be asked for one — cash over the counter has no image to produce, and demanding one
+          * meant inventing a picture to record a sale that plainly happened.
+          */}
+        <div>
+          <span className="field-label">Payment mode</span>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { value: 'online', label: 'Online', hint: 'Transfer — needs proof' },
+              { value: 'offline', label: 'Offline', hint: 'Cash or card in person' },
+            ] as const).map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPaymentMode(opt.value)}
+                aria-pressed={paymentMode === opt.value}
+                className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                  paymentMode === opt.value
+                    ? 'border-primary-500 bg-primary-50 text-primary-800'
+                    : 'border-ink-200 text-ink-600 hover:bg-ink-50'
+                }`}
+              >
+                <span className="block text-sm font-medium">{opt.label}</span>
+                <span className="block text-[11px] text-ink-500">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {paymentMode === 'online' && (
         <div>
           <label className="field-label" htmlFor={`${id}-screenshot`}>
             Payment Screenshot <span className="text-danger-500">*</span>
@@ -330,6 +365,7 @@ export function ConvertLeadModal({
             </p>
           )}
         </div>
+        )}
 
         <div className="flex flex-col-reverse gap-3 border-t border-ink-100 pt-3 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>

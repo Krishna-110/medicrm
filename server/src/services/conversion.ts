@@ -192,6 +192,8 @@ export type ConversionInput = {
   paymentScreenshot: string;
   /** The sale, as composed in the dialog: which medicines, and for how many days each. */
   items: QuoteRequest[];
+  /** 'online' demands the screenshot; 'offline' is cash in hand and has none. */
+  paymentMode?: 'online' | 'offline';
   discountType?: 'none' | 'flat' | 'percentage';
   discountValue?: Prisma.Decimal | number;
 };
@@ -202,11 +204,13 @@ export async function convertLeadToOrder(
   input: ConversionInput,
   fallbackUnitPrice: Prisma.Decimal | number = 0,
 ) {
-  // Proof of payment is a precondition, not a detail to be filled in later. Checked before
-  // the transaction opens so a missing screenshot costs nothing.
+  // Proof of payment is a precondition, not a detail to be filled in later — but only for a
+  // transfer, which leaves a screenshot behind. Cash over the counter has none to show, and
+  // demanding one there meant inventing an image to record a sale that plainly happened.
+  const paymentMode = input.paymentMode === 'offline' ? 'offline' : 'online';
   const screenshot = String(input.paymentScreenshot ?? '').trim();
-  if (!screenshot) {
-    throw ApiError.badRequest('A payment screenshot is required to convert a lead into an order');
+  if (paymentMode === 'online' && !screenshot) {
+    throw ApiError.badRequest('A payment screenshot is required for an online payment');
   }
   const discountType = input.discountType ?? 'none';
   const discountValue = new Prisma.Decimal(input.discountValue ?? 0);
@@ -262,14 +266,19 @@ export async function convertLeadToOrder(
     // existing UI reads payment proof from. The lead holds only the most recent, so the
     // order's copy is the one that stays true once a customer buys twice. Required to get
     // this far, so the order is paid by construction rather than by inspecting the lead.
-    await tx.lead.update({ where: { id: lead.id }, data: { paymentScreenshot: screenshot } });
+    // Nothing to copy for a cash sale, and writing an empty string over the lead's existing
+    // proof would lose the record of an earlier transfer.
+    if (screenshot) {
+      await tx.lead.update({ where: { id: lead.id }, data: { paymentScreenshot: screenshot } });
+    }
 
     const order = await tx.order.create({
       data: {
         orderNumber: await nextOrderNumber(tx),
         customerId,
         leadId: lead.id,
-        paymentScreenshot: screenshot,
+        paymentScreenshot: screenshot || null,
+        paymentMode,
         customerName: customer.fullName,
         shippingAddress: [lead.address, lead.city, lead.state, lead.pincode].filter(Boolean).join(', '),
         stage: 'confirmed',
