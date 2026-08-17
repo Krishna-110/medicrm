@@ -129,7 +129,15 @@ export function Leads() {
   const [sortField, setSortField] = useState<SortField>('createdDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const callers = state.users.filter(u => u.role === 'caller')
+  /*
+   * Who this lead can be handed to. A caller may only ever hold their own — the server
+   * refuses anything else with a 403 — so offering them the rest of the team was offering
+   * choices that could only fail on save. Admins get everyone.
+   */
+  const isCaller = state.currentUser?.role === 'caller'
+  const callers = state.users.filter(u =>
+    isCaller ? u.id === state.currentUser?.id : u.role === 'caller',
+  )
 
   const medicineOptions = state.medicines
     .filter(m => m.isActive)
@@ -231,7 +239,14 @@ export function Leads() {
 
   function openCreate() {
     setEditingLead(null)
-    setForm({ ...emptyForm, medicines: [emptyMedicineRow()] })
+    setForm({
+      ...emptyForm,
+      medicines: [emptyMedicineRow()],
+      // A caller's own lead, preselected. The server already forces it to them whatever the
+      // form says, so leaving this on "Unassigned" showed them something that was never
+      // going to happen. An admin still starts unassigned and chooses.
+      assignedCaller: state.currentUser?.role === 'caller' ? state.currentUser.id : '',
+    })
     setShowModal(true)
   }
 
@@ -730,7 +745,9 @@ export function Leads() {
                 onChange={e => setForm(f => ({ ...f, assignedCaller: e.target.value }))}
                 className="field-input"
               >
-                <option value="">Unassigned</option>
+                {/* Unassigned is an admin's choice. A caller leaving it here would be
+                    refused on save, since their leads must stay with them. */}
+                {!isCaller && <option value="">Unassigned</option>}
                 {callers.map(c => (
                   <option key={c.id} value={c.id}>
                     {c.name}
