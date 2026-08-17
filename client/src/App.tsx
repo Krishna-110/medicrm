@@ -28,6 +28,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * An admin-only page.
+ *
+ * Hiding the link in the sidebar was never enough on its own — the route stayed reachable by
+ * typing the address, which showed a caller a page of controls that answer 403. Sent to the
+ * dashboard rather than shown a refusal: nothing here is theirs to act on, so there is
+ * nothing to explain.
+ */
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { state } = useApp()
+  if (state.booting) return null
+  return state.currentUser?.role === 'admin' ? <>{children}</> : <Navigate to="/" replace />
+}
+
 export function App() {
   return (
     <>
@@ -44,11 +58,13 @@ export function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
-          <Route path="/users" element={<Users />} />
+          <Route path="/users" element={<AdminRoute><Users /></AdminRoute>} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/renewals" element={<Renewals />} />
-          <Route path="/stock" element={<Stock />} />
+          {/* The catalogue is an admin's to keep; a caller only ever reads prices and stock
+              through the conversion dialog, which needs no page of its own. */}
+          <Route path="/stock" element={<AdminRoute><Stock /></AdminRoute>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

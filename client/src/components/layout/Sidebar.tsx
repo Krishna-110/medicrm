@@ -35,7 +35,7 @@ const mainItems: NavItem[] = [
 const workItems: NavItem[] = [
   { to: '/orders', label: 'Orders', icon: ShoppingCart, badge: 'orders' },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw, badge: 'renewals' },
-  { to: '/stock', label: 'Stock', icon: Package },
+  { to: '/stock', label: 'Stock', icon: Package, adminOnly: true },
 ]
 
 const adminItems: NavItem[] = [
