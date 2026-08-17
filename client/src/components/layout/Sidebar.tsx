@@ -23,7 +23,7 @@ type NavItem = {
   icon: typeof LayoutDashboard
   end?: boolean
   adminOnly?: boolean
-  badge?: 'leads' | 'renewals'
+  badge?: 'leads' | 'orders' | 'renewals'
 }
 
 const mainItems: NavItem[] = [
@@ -33,7 +33,7 @@ const mainItems: NavItem[] = [
 ]
 
 const workItems: NavItem[] = [
-  { to: '/orders', label: 'Orders', icon: ShoppingCart },
+  { to: '/orders', label: 'Orders', icon: ShoppingCart, badge: 'orders' },
   { to: '/renewals', label: 'Renewals', icon: RefreshCw, badge: 'renewals' },
   { to: '/stock', label: 'Stock', icon: Package },
 ]
@@ -56,8 +56,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { currentUser } = state
   const canSeeAdmin = currentUser?.role === 'admin'
 
+  /*
+   * Each badge is work waiting on this screen, not a total — a count you have to act on is
+   * worth a red dot, a count of everything that ever happened is not. So: leads nobody has
+   * worked yet, orders still to get out of the door, renewals whose call is due.
+   *
+   * Derived from the store, so they move with it: dispatching a status change or arriving
+   * on a page with fresh data re-renders these without anything else being wired up.
+   */
   const badgeCounts = {
     leads: state.leads.filter((l) => ['new', 'follow_up_pending'].includes(l.status)).length,
+    orders: state.orders.filter((o) => o.stage !== 'delivered').length,
     renewals: state.renewals.filter((r) => r.status === 'due_today' || r.status === 'overdue').length,
   }
 
