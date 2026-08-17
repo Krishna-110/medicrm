@@ -157,8 +157,10 @@ export function LeadDetailPage() {
   // Same dialog the leads list uses, so both routes into a conversion ask for the same
   // things. They were separate confirmations before, and only one of them would have grown
   // the payment and discount rules.
-  function handleConverted({ order, lead: updatedLead }: ConvertResponse) {
+  function handleConverted({ order, lead: updatedLead, renewals }: ConvertResponse) {
     dispatch({ type: 'ADD_ORDER', payload: { order } })
+    // One renewal per medicine sold — the same omission the Leads handler had.
+    for (const renewal of renewals) dispatch({ type: 'ADD_RENEWAL', payload: { renewal } })
     // The lead is nullable — it is read back through the caller's own scope, so an admin
     // converting someone else's lead gets the order and no lead. Dereferencing it blindly was
     // the same mistake that broke Schedule Follow-up; the order is what matters here.

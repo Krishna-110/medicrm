@@ -157,6 +157,12 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'ADD_FOLLOW_UP':
       return { ...state, followUps: [action.payload.followUp, ...state.followUps] };
 
+    // Replaces the list wholesale. Saving a lead's follow-up date can create, move or retire
+    // a follow-up server-side, and the lead response says nothing about which — so the list
+    // is re-read rather than guessed at.
+    case 'SET_FOLLOW_UPS':
+      return { ...state, followUps: action.payload.followUps };
+
     case 'UPDATE_FOLLOW_UP':
       return {
         ...state,

@@ -81,7 +81,7 @@ renewalsRouter.post(
     // renewedAt alone ended the relationship: the customer dropped off the list entirely,
     // nobody would ever be prompted to call them again, and the repeat sale went unrecorded.
     // previousRenewalId has been in the schema from the start for exactly this chain.
-    const { renewal: updated, order } = await prisma.$transaction(async (tx) => {
+    const { renewal: updated, order, next } = await prisma.$transaction(async (tx) => {
       const renewed = await tx.renewal.update({
         where: { id },
         data: { renewedAt: new Date() },
@@ -172,7 +172,7 @@ renewalsRouter.post(
       const graceDays = Math.max(istDayDiff(renewed.expiryDate, renewed.renewalDate), 1);
       const from = renewed.renewedAt!;
 
-      await tx.renewal.create({
+      const nextCycle = await tx.renewal.create({
         data: {
           customerId: renewed.customerId,
           customerName: renewed.customerName,
@@ -196,10 +196,17 @@ renewalsRouter.post(
         where: { id: created.id },
         include: { items: { orderBy: { createdAt: 'asc' } } },
       });
-      return { renewal: renewed, order: withItems };
+      return { renewal: renewed, order: withItems, next: nextCycle };
     });
 
-    res.json({ renewal: serializeRenewal(updated), order: serializeOrder(order) });
+    // The cycle just opened is returned alongside the one just closed. Without it the client
+    // is told a renewal was completed but never told its successor exists, and the Renewals
+    // page — the very list the user is looking at — silently omits the next call to make.
+    res.json({
+      renewal: serializeRenewal(updated),
+      order: serializeOrder(order),
+      nextRenewal: serializeRenewal(next),
+    });
   }),
 );
 

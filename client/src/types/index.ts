@@ -224,6 +224,7 @@ export type AppAction =
   | { type: 'UPDATE_RENEWAL'; payload: { id: string; updates: Partial<Renewal> } }
   | { type: 'DELETE_RENEWAL'; payload: { id: string } }
   | { type: 'ADD_FOLLOW_UP'; payload: { followUp: FollowUp } }
+  | { type: 'SET_FOLLOW_UPS'; payload: { followUps: FollowUp[] } }
   | { type: 'UPDATE_FOLLOW_UP'; payload: { id: string; updates: Partial<FollowUp> } }
   | { type: 'ADD_NOTIFICATION'; payload: { notification: Notification } }
   | { type: 'MARK_NOTIFICATION_READ'; payload: { id: string } }

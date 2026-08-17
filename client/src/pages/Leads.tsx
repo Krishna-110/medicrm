@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '@/context/AppContext'
 import { leadsApi } from '@/api/leads'
+import { followUpsApi } from '@/api/followUps'
 import { medicinesApi } from '@/api/medicines'
 import { ApiError } from '@/api/client'
 import { emitToast } from '@/lib/toast'
@@ -281,6 +282,16 @@ export function Leads() {
    * screenshot just pasted into the form would otherwise be ignored by the conversion that
    * happens a second later. Returns null when validation stopped it or the request failed.
    */
+  /** Re-read the follow-ups after a write that silently reshaped them. Best-effort: a failure
+   *  leaves the previous list, which the next page change replaces anyway. */
+  async function refreshFollowUps() {
+    try {
+      dispatch({ type: 'SET_FOLLOW_UPS', payload: { followUps: await followUpsApi.list() } })
+    } catch {
+      // ignored on purpose
+    }
+  }
+
   async function saveLead(): Promise<Lead | null> {
 
     const medicines = form.medicines
@@ -333,6 +344,12 @@ export function Leads() {
       if (editingLead) {
         const lead = await leadsApi.update(editingLead.id, payload)
         dispatch({ type: 'UPDATE_LEAD', payload: { id: lead.id, updates: lead } })
+        // Changing the date creates, moves or retires a follow-up server-side, and the lead
+        // response reports none of it — which is why a date set here never reached the
+        // Calendar. Re-read the list when, and only when, that date actually moved.
+        if ((editingLead.nextFollowUp ?? '') !== (form.nextFollowUp ?? '')) {
+          void refreshFollowUps()
+        }
         return lead
       }
       const lead = await leadsApi.create(payload)
@@ -363,8 +380,11 @@ export function Leads() {
 
   // The dialog owns pricing, discount and the payment screenshot; this only records the
   // result. Errors are reported there, next to the form that caused them.
-  function handleConverted({ order, lead: updatedLead }: ConvertResponse) {
+  function handleConverted({ order, lead: updatedLead, renewals }: ConvertResponse) {
     dispatch({ type: 'ADD_ORDER', payload: { order } })
+    // A sale opens a renewal per medicine. They were created and never mentioned, so the
+    // Renewals page ignored the sale until the data was fetched again.
+    for (const renewal of renewals) dispatch({ type: 'ADD_RENEWAL', payload: { renewal } })
     // Nullable — see the same handler in LeadDetailPage. The order carries the customer name,
     // so nothing here needs the lead to exist.
     if (updatedLead) {

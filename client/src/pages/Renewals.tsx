@@ -97,9 +97,12 @@ export function Renewals() {
   // order it produced. The next cycle arrives on the following load rather than being
   // synthesised here — the server decides its dates, and guessing them would invent a second
   // source of truth for something already computed.
-  function handleRenewed({ renewal, order }: RenewResponse) {
+  function handleRenewed({ renewal, order, nextRenewal }: RenewResponse) {
     dispatch({ type: 'UPDATE_RENEWAL', payload: { id: renewal.id, updates: renewal } })
     dispatch({ type: 'ADD_ORDER', payload: { order } })
+    // Renewing closes one cycle and opens the next. Only the closure was recorded here, so
+    // this list — the one being looked at — dropped the customer until it was fetched again.
+    dispatch({ type: 'ADD_RENEWAL', payload: { renewal: nextRenewal } })
   }
 
   function openReminder(renewal: Renewal) {

@@ -721,6 +721,47 @@ describe('follow-up scheduling stays in step with the lead', () => {
   });
 });
 
+describe('a write reports what it caused', () => {
+  it('converting returns the renewals it opened, one per medicine', async () => {
+    await setStock('Atorva', 999);
+    await setStock('Sansamrit', 999);
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: caller.userId,
+      medicines: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
+    }));
+
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    expect(res.status).toBe(200);
+    // Without these the client is told an order exists but never that the sale opened any
+    // renewals, so the Renewals page ignores the sale until the data is fetched again.
+    expect(res.body.renewals).toHaveLength(2);
+    expect(res.body.renewals.map((r: { medicineName: string }) => r.medicineName).sort())
+      .toEqual(['Atorva', 'Sansamrit']);
+    // They are the real rows, not echoes of the request.
+    const listed = (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id);
+    for (const r of res.body.renewals) expect(listed).toContain(r.id);
+  });
+
+  it('renewing returns the cycle it opened, not just the one it closed', async () => {
+    await setStock('Atorva', 999);
+    const before = new Set((await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id));
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body.filter((r: { id: string }) => !before.has(r.id));
+
+    const res = await as(admin).post(`/api/renewals/${renewal.id}/renew`, {
+      items: [{ name: 'Atorva', days: 30 }],
+      paymentScreenshot: 'data:image/png;base64,AAA',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.renewal.id).toBe(renewal.id);          // the cycle just closed
+    expect(res.body.nextRenewal).toBeTruthy();             // the cycle that replaces it
+    expect(res.body.nextRenewal.id).not.toBe(renewal.id);
+    expect(res.body.nextRenewal.previousRenewalId).toBe(renewal.id);
+    expect(res.body.nextRenewal.status).not.toBe('renewed');
+  });
+});
+
 describe('renewal reminders', () => {
   it('moves the existing reminder to the new date and says which renewal it is for', async () => {
     await setStock('Atorva', 999);

@@ -5,7 +5,7 @@ import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
-import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder } from '../lib/serialize.js';
+import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import type { ActivityCreateResponse, ConvertResponse } from '../lib/contract.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { convertLeadToOrder, previewConversion } from '../services/conversion.js';
@@ -345,9 +345,17 @@ leadsRouter.post(
       where: { id: param(req, 'id') },
       include: WITH_CHILDREN,
     });
+    // Conversion opens a renewal per medicine sold. They were created and never mentioned, so
+    // the Renewals page stayed empty-looking until a reload; returning them lets the client
+    // show the follow-up work the sale just generated.
+    const renewals = await prisma.renewal.findMany({
+      where: { orderId: order.id, deletedAt: null },
+      orderBy: { renewalDate: 'asc' },
+    });
     const payload: ConvertResponse = {
       order: serializeOrder(order),
       lead: lead ? serializeLead(lead) : null,
+      renewals: renewals.map(serializeRenewal),
     };
     res.json(payload);
   }),

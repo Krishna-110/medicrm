@@ -47,8 +47,11 @@ export type FollowUpUpdateResponse = { followUp: ApiFollowUp; lead: ApiLead | nu
 /** POST /api/leads/:id/activities — the medicine is optional and only present when supplied. */
 export type ActivityCreateResponse = { activity: ApiLeadActivity; medicine: ApiLeadMedicine | null };
 
-/** POST /api/leads/:id/convert */
-export type ConvertResponse = { order: ApiOrder; lead: ApiLead | null };
+/** POST /api/leads/:id/convert — `renewals` is the cycle opened for each medicine sold. */
+export type ConvertResponse = { order: ApiOrder; lead: ApiLead | null; renewals: ApiRenewal[] };
 
-/** POST /api/renewals/:id/renew — renewing places a repeat order and opens the next cycle. */
-export type RenewResponse = { renewal: ApiRenewal; order: ApiOrder };
+/**
+ * POST /api/renewals/:id/renew — renewing places a repeat order and opens the next cycle.
+ * `renewal` is the cycle just closed, `nextRenewal` the one that succeeds it.
+ */
+export type RenewResponse = { renewal: ApiRenewal; order: ApiOrder; nextRenewal: ApiRenewal };
