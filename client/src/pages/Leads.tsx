@@ -430,6 +430,18 @@ export function Leads() {
                       >
                         <Edit2 size={15} />
                       </button>
+                      {/* Straight to the sale, skipping the detail page. Hidden once converted,
+                          since that transition only goes one way. */}
+                      {lead.status !== 'converted' && (
+                        <button
+                          onClick={() => setConvertingLead(lead)}
+                          className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-success-50 hover:text-success-600"
+                          title="Convert to order"
+                          aria-label={`Convert ${lead.customerName} to an order`}
+                        >
+                          <ShoppingCart size={15} />
+                        </button>
+                      )}
                       <button
                         onClick={() => deleteLead(lead.id)}
                         className="rounded-lg p-1.5 text-ink-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
