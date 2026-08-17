@@ -2,28 +2,22 @@ import type { ActivityCreateResponse, ConvertResponse } from '../../../server/sr
 import { api } from './client';
 import type { Lead, LeadActivity, LeadMedicineItem, Order, FollowUp } from '@/types';
 
-export type ConversionPreviewItem = {
-  name: string
-  quantity: number
-  unitPrice: number
-  lineTotal: number
-  /** False when no catalogue product matched the name, which is why the line is priced at 0. */
-  inCatalogue: boolean
-  /** Units in stock, or null for a non-catalogue medicine. */
-  stock: number | null
-  /** Whether stock covers the days (quantity). A false here blocks the conversion. */
-  covered: boolean
-}
-
+/**
+ * What the dialog needs before the sale is composed: where the stock would leave from.
+ *
+ * That follows the lead's assigned caller rather than whoever is looking, so it cannot be
+ * worked out client-side. Prices and per-location stock come from the catalogue already in
+ * the store, and the server re-prices from its own copy when it bills.
+ */
 export type ConversionPreview = {
-  items: ConversionPreviewItem[]
-  totalAmount: number
   /** The caller's location the sale draws from, or null when none is assigned. */
   locationName: string | null
 }
 
 export type ConvertPayload = {
   paymentScreenshot: string
+  /** The sale itself: medicine and tenure per line, chosen in the dialog. */
+  items: { name: string; days: number }[]
   discountType: 'none' | 'flat' | 'percentage'
   discountValue: number
 }

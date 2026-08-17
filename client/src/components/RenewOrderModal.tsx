@@ -19,6 +19,9 @@ import type { RenewResponse } from '../../../server/src/lib/contract.js'
  */
 type Row = { id: string; name: string; days: string }
 
+/** The tenures sold, shared with the conversion dialog. */
+const TENURES = [15, 30, 60, 90] as const
+
 /** Whole days between two ISO dates — the supply period the renewal was built on. */
 function daysBetween(fromIso: string, toIso: string): number {
   const ms = new Date(toIso).getTime() - new Date(fromIso).getTime()
@@ -164,16 +167,23 @@ export function RenewOrderModal({
                  * have tracked.
                  */}
                 <div className="flex w-full items-stretch gap-2 sm:w-auto">
-                  <div className="flex flex-1 flex-col sm:w-20 sm:flex-none sm:grow-0">
-                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Days</label>
-                    <input
-                      type="number"
-                      min={1}
+                  <div className="flex flex-1 flex-col sm:w-24 sm:flex-none sm:grow-0">
+                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`tenure-${line.id}`}>Tenure</label>
+                    {/* The same bundles the conversion dialog sells, so a reorder cannot run
+                        for a period the business does not offer. A cycle carried over from an
+                        older free-typed value stays selectable until it is changed. */}
+                    <select
+                      id={`tenure-${line.id}`}
                       value={line.days}
                       onChange={e => setRow(line.id, { days: e.target.value })}
-                      aria-label={`Days of supply for medicine ${idx + 1}`}
+                      aria-label={`Tenure for medicine ${idx + 1}`}
                       className="field-input"
-                    />
+                    >
+                      {!TENURES.some(t => t === line.days) && (
+                        <option value={line.days}>{line.days} days</option>
+                      )}
+                      {TENURES.map(t => <option key={t} value={String(t)}>{t} days</option>)}
+                    </select>
                   </div>
                   <div className="flex w-24 flex-col">
                     <span aria-hidden className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-transparent">₹</span>

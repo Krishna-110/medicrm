@@ -45,9 +45,14 @@ const nextId = () => `${Date.now()}${uniq++}`;
  * A conversion payload. The screenshot is mandatory, so tests that are about something else
  * still have to supply one — and tests asserting a different rejection must supply one too,
  * or they would pass on the missing-screenshot 400 instead of the reason they mean to check.
+ *
+ * `items` is the sale. It is sent here rather than read off the lead, because the medicines
+ * are chosen in the conversion dialog now; the default mirrors leadPayload's own default so
+ * a test that cares about neither stays short.
  */
 const convertPayload = (over: Record<string, unknown> = {}) => ({
   paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
+  items: [{ name: 'Atorva', days: 1 }],
   discountType: 'none',
   discountValue: 0,
   ...over,
@@ -262,19 +267,21 @@ describe('lead lifecycle', () => {
     expect(await price(true)).toBe(untouched);
   });
 
-  it('prices a lead whose medicine link was lost, by matching the name', async () => {
-    // Leads edited before the edit path learned to look up the catalogue have productId null
-    // on rows whose medicine is in the catalogue. Pricing those at zero would be wrong about
-    // data sitting right there, so the quote falls back to the name.
+  it('prices a sale sent by name alone, matching the catalogue', async () => {
+    // The dialog sends what the caller picked — a name and a tenure — with no product id.
+    // Pricing that at zero would be wrong about data sitting right there, so the quote
+    // resolves the name against the catalogue.
+    await setStock('Atorva', 999);
+    const atorva = (await as(admin).get('/api/medicines')).body.find((m: { name: string }) => m.name === 'Atorva');
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
-    await prisma.leadMedicine.updateMany({ where: { leadId: lead.id }, data: { productId: null } });
 
-    const preview = await as(admin).get(`/api/leads/${lead.id}/convert-preview`);
-    expect(preview.body.totalAmount).toBeGreaterThan(0);
-    expect(preview.body.items[0].inCatalogue).toBe(true);
-
-    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
-    expect(Number(res.body.order.totalAmount)).toBe(preview.body.totalAmount);
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      items: [{ name: 'Atorva', days: 15 }],
+    }));
+    expect(res.status).toBe(200);
+    // Days are units: 15 days bills 15 × the unit price.
+    expect(Number(res.body.order.totalAmount)).toBe(atorva.unitPrice * 15);
+    expect(res.body.order.medicines[0].quantity).toBe(15);
   });
 
   it('refuses to convert without a payment screenshot', async () => {
@@ -292,19 +299,19 @@ describe('lead lifecycle', () => {
   });
 
   it('applies a discount and records the order as paid', async () => {
+    await setStock('Atorva', 999);
+    const atorva = (await as(admin).get('/api/medicines')).body.find((m: { name: string }) => m.name === 'Atorva');
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
-    const preview = await as(admin).get(`/api/leads/${lead.id}/convert-preview`);
-    expect(preview.status).toBe(200);
-    expect(preview.body.totalAmount).toBeGreaterThan(0);
 
     const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      items: [{ name: 'Atorva', days: 1 }],
       discountType: 'percentage',
       discountValue: 25,
     }));
     expect(res.status).toBe(200);
-    // The preview is what the user approved, so the order must bill exactly that.
-    expect(Number(res.body.order.totalAmount)).toBe(preview.body.totalAmount);
-    expect(Number(res.body.order.payableAmount)).toBe(preview.body.totalAmount * 0.75);
+    // The dialog shows days × unit price, so the order must bill exactly that.
+    expect(Number(res.body.order.totalAmount)).toBe(atorva.unitPrice);
+    expect(Number(res.body.order.payableAmount)).toBe(atorva.unitPrice * 0.75);
     expect(res.body.order.paymentStatus).toBe('paid');
   });
 
@@ -431,7 +438,9 @@ describe('follow-up scheduling stays in step with the lead', () => {
       assignedCaller: caller.userId,
       medicines: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
     }));
-    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      items: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
+    }));
 
     const mine = (await as(admin).get('/api/renewals')).body
       .filter((r: { id: string }) => !before.has(r.id));
@@ -505,7 +514,9 @@ describe('follow-up scheduling stays in step with the lead', () => {
       assignedCaller: westCaller.id,
       medicines: [{ name: 'Atorva', days: 30 }],
     }));
-    expect((await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload())).status).toBe(200);
+    expect((await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      items: [{ name: 'Atorva', days: 30 }],
+    }))).status).toBe(200);
 
     expect(await stockAt(west.id)).toBe(70); // 100 - 30, the caller's location
     expect(await stockAt(main.id)).toBe(100); // untouched
@@ -535,7 +546,9 @@ describe('follow-up scheduling stays in step with the lead', () => {
       medicines: [{ name: 'Atorva', days: 50 }],
     }));
 
-    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      items: [{ name: 'Atorva', days: 50 }],
+    }));
     expect(res.status).toBe(400);
     expect(String(res.body.error)).toMatch(/ask an admin to update the stock/i);
 
@@ -761,7 +774,9 @@ describe('a write reports what it caused', () => {
       medicines: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
     }));
 
-    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      items: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
+    }));
     expect(res.status).toBe(200);
     // Without these the client is told an order exists but never that the sale opened any
     // renewals, so the Renewals page ignores the sale until the data is fetched again.
@@ -1021,9 +1036,16 @@ describe('error mapping', () => {
     expect(String(res.body.error)).toMatch(/required/i);
   });
 
-  it('a lead with no medicines -> 400', async () => {
+  it('a lead with no medicines is fine — the sale is composed at conversion', async () => {
     const res = await as(admin).post('/api/leads', leadPayload({ medicines: [] }));
+    expect(res.status).toBe(201);
+  });
+
+  it('converting with nothing chosen -> 400', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const res = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({ items: [] }));
     expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/at least one medicine/i);
   });
 
   it('a duplicate email -> 409 with a readable message', async () => {

@@ -4,17 +4,14 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '@/context/AppContext'
 import { leadsApi } from '@/api/leads'
 import { followUpsApi } from '@/api/followUps'
-import { medicinesApi } from '@/api/medicines'
-import { ApiError } from '@/api/client'
 import { emitToast } from '@/lib/toast'
 import { formatIndianDate } from '@/lib/dateUtils'
-import type { Lead, LeadStatus, LeadSource, Order } from '@/types'
+import type { Lead, LeadStatus, LeadSource } from '@/types'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConvertLeadModal } from '@/components/ConvertLeadModal'
 import { SearchInput } from '@/components/ui/SearchInput'
-import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { DateInput } from '@/components/ui/DateInput'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Tabs } from '@/components/ui/Tabs'
@@ -67,12 +64,6 @@ const leadSourceOptions: { value: LeadSource; label: string }[] = [
   { value: 'other', label: 'Other' },
 ]
 
-type LeadMedicineRow = {
-  id: string
-  name: string
-  days: string
-}
-
 type LeadForm = {
   customerName: string
   mobile: string
@@ -82,18 +73,12 @@ type LeadForm = {
   state: string
   pincode: string
   disease: string
-  medicines: LeadMedicineRow[]
   doctorName: string
   notes: string
   leadSource: LeadSource
   assignedCaller: string
   status: LeadStatus
   nextFollowUp: string
-  paymentScreenshot: string
-}
-
-function emptyMedicineRow(): LeadMedicineRow {
-  return { id: crypto.randomUUID(), name: '', days: '1' }
 }
 
 const emptyForm: LeadForm = {
@@ -105,7 +90,6 @@ const emptyForm: LeadForm = {
   state: '',
   pincode: '',
   disease: '',
-  medicines: [{ id: 'new-medicine-1', name: '', days: '1' }],
   doctorName: '',
   notes: '',
   // Where most leads actually come from, so the common case needs no touch.
@@ -113,7 +97,6 @@ const emptyForm: LeadForm = {
   assignedCaller: '',
   status: 'new',
   nextFollowUp: '',
-  paymentScreenshot: '',
 }
 
 export function Leads() {
@@ -138,42 +121,6 @@ export function Leads() {
   const callers = state.users.filter(u =>
     isCaller ? u.id === state.currentUser?.id : u.role === 'caller',
   )
-
-  const medicineOptions = state.medicines
-    .filter(m => m.isActive)
-    .map(m => ({ id: m.id, label: m.name, sublabel: m.genericName }))
-
-  function updateMedicineRow(rowId: string, updates: Partial<Pick<LeadMedicineRow, 'name' | 'days'>>) {
-    setForm(f => ({
-      ...f,
-      medicines: f.medicines.map(row => (row.id === rowId ? { ...row, ...updates } : row)),
-    }))
-  }
-
-  function addMedicineRow() {
-    setForm(f => ({ ...f, medicines: [...f.medicines, emptyMedicineRow()] }))
-  }
-
-  function removeMedicineRow(rowId: string) {
-    setForm(f => ({
-      ...f,
-      medicines: f.medicines.length > 1 ? f.medicines.filter(row => row.id !== rowId) : f.medicines,
-    }))
-  }
-
-  async function createMedicineForRow(rowId: string, name: string) {
-    try {
-      const medicine = await medicinesApi.create({ name })
-      dispatch({ type: 'ADD_MEDICINE', payload: { medicine } })
-    } catch (err) {
-      // Callers can't write to the catalog (403) — fall back to free text; the lead
-      // still captures the medicine name, it just won't have a catalog product link.
-      if (!(err instanceof ApiError && err.status === 403)) {
-        emitToast(err instanceof Error ? err.message : 'Failed to create medicine')
-      }
-    }
-    updateMedicineRow(rowId, { name })
-  }
 
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = { all: state.leads.length }
@@ -241,7 +188,6 @@ export function Leads() {
     setEditingLead(null)
     setForm({
       ...emptyForm,
-      medicines: [emptyMedicineRow()],
       // A caller's own lead, preselected. The server already forces it to them whatever the
       // form says, so leaving this on "Unassigned" showed them something that was never
       // going to happen. An admin still starts unassigned and chooses.
@@ -261,16 +207,12 @@ export function Leads() {
       state: lead.state,
       pincode: lead.pincode,
       disease: lead.disease ?? '',
-      medicines: lead.medicines.length
-        ? lead.medicines.map(m => ({ id: m.id, name: m.name, days: String(m.days) }))
-        : [emptyMedicineRow()],
       doctorName: lead.doctorName ?? '',
       notes: lead.notes ?? '',
       leadSource: lead.leadSource,
       assignedCaller: lead.assignedCaller ?? '',
       status: lead.status,
       nextFollowUp: lead.nextFollowUp ?? '',
-      paymentScreenshot: lead.paymentScreenshot ?? '',
     })
     setShowModal(true)
   }
@@ -309,21 +251,11 @@ export function Leads() {
   }
 
   async function saveLead(): Promise<Lead | null> {
-
-    const medicines = form.medicines
-      .filter(row => row.name.trim())
-      .map(row => ({ id: row.id, name: row.name.trim(), days: Number(row.days) || 1 }))
-    if (!editingLead && medicines.length === 0) return null
-
-    if (editingLead && form.status === 'sold') {
-      if (!form.address.trim()) {
-        emitToast('Customer Address is required when Lead Status is Sold')
-        return null
-      }
-      if (!form.paymentScreenshot.trim()) {
-        emitToast('Payment Screenshot is required when Lead Status is Sold')
-        return null
-      }
+    // Medicines and payment proof are no longer captured here — both belong to the sale, and
+    // the sale is composed in the conversion dialog. A lead records who the customer is.
+    if (editingLead && form.status === 'sold' && !form.address.trim()) {
+      emitToast('Customer Address is required when Lead Status is Sold')
+      return null
     }
 
     const payload = {
@@ -335,10 +267,6 @@ export function Leads() {
       state: form.state,
       pincode: form.pincode,
       disease: form.disease,
-      // Editing a lead with no medicines yet (added later via comments) shouldn't wipe
-      // that out — only send this key when there's something to bulk-replace with, since
-      // the backend treats a present `medicines` array as "replace all of them".
-      ...(medicines.length > 0 ? { medicines } : {}),
       doctorName: form.doctorName || undefined,
       notes: form.notes || undefined,
       leadSource: form.leadSource,
@@ -348,7 +276,6 @@ export function Leads() {
       ...(editingLead ? {
         status: form.status,
         nextFollowUp: form.nextFollowUp || undefined,
-        paymentScreenshot: form.paymentScreenshot || undefined,
       } : {}),
     }
 
@@ -636,67 +563,6 @@ export function Leads() {
             />
           </div>
 
-          {/* Medicines Required */}
-          <div>
-            <span className="field-label" id="leads-medicines-label">Medicines Required</span>
-            <div className="space-y-3" role="group" aria-labelledby="leads-medicines-label">
-              {form.medicines.map((row, idx) => (
-                <div key={row.id} className="flex flex-wrap items-start gap-2">
-                  {/*
-                   * The search takes a whole row on phones. Sharing one line with the days
-                   * field and the delete button left it around 150px wide, which truncated
-                   * every medicine name both in the field and in the dropdown beneath it —
-                   * "Dardantak Powder" rendered as "Dardant...". From `sm` up there is room
-                   * for the original single-row layout, so nothing changes there.
-                   */}
-                  <div className="w-full min-w-0 sm:flex-1">
-                    <SearchableSelect
-                      value={row.name}
-                      onChange={name => updateMedicineRow(row.id, { name })}
-                      options={medicineOptions}
-                      placeholder="Search medicines..."
-                      ariaLabel={`Medicine ${idx + 1}`}
-                      onCreateNew={name => createMedicineForRow(row.id, name)}
-                      emptyText="No medicines found"
-                      required={idx === 0 && !editingLead}
-                    />
-                  </div>
-                  <div className="flex w-full items-start gap-2 sm:w-auto">
-                    <div className="flex-1 sm:w-28 sm:flex-none">
-                      <input
-                        type="number"
-                        min={1}
-                        required={idx === 0 && !editingLead}
-                        value={row.days}
-                        onChange={e => updateMedicineRow(row.id, { days: e.target.value })}
-                        placeholder="Days"
-                        aria-label={`Days supply for medicine ${idx + 1}`}
-                        className="field-input"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeMedicineRow(row.id)}
-                      disabled={form.medicines.length === 1}
-                      title="Remove medicine"
-                      aria-label={`Remove medicine ${idx + 1}`}
-                      className="mt-0.5 shrink-0 rounded-lg p-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30 sm:p-2"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={addMedicineRow}
-              className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
-            >
-              <Plus size={15} /> Add Another Medicine
-            </button>
-          </div>
-
           <div>
             <label className="field-label" htmlFor="leads-doctor-name-optional">Doctor Name (optional)</label>
             <input
@@ -787,44 +653,6 @@ export function Leads() {
                 </div>
               </div>
 
-              <div>
-                <label className="field-label">
-                  Payment Screenshot {form.status === 'sold' && <span className="text-danger-500">*</span>}
-                </label>
-                <div className="space-y-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      if (file.size > 5 * 1024 * 1024) {
-                        emitToast('Image size should be under 5MB')
-                        return
-                      }
-                      const reader = new FileReader()
-                      reader.onloadend = () => {
-                        setForm(f => ({ ...f, paymentScreenshot: reader.result as string }))
-                      }
-                      reader.readAsDataURL(file)
-                    }}
-                    className="field-input py-1.5 text-xs text-ink-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-primary-700 hover:file:bg-primary-100"
-                  />
-                  {form.paymentScreenshot && (
-                    <div className="relative inline-block mt-2 rounded-xl border border-ink-200 overflow-hidden bg-ink-50 p-1">
-                      <img src={form.paymentScreenshot} alt="Payment Screenshot" className="h-28 max-w-full object-contain rounded-lg" />
-                      <button
-                        type="button"
-                        onClick={() => setForm(f => ({ ...f, paymentScreenshot: '' }))}
-                        className="absolute top-2 right-2 rounded-full bg-danger-600 p-1 text-white shadow hover:bg-danger-700"
-                        title="Remove image"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
             </>
           )}
 

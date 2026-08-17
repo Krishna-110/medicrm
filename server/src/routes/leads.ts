@@ -124,10 +124,12 @@ leadsRouter.post(
     for (const field of REQUIRED) {
       if (!body[field]) throw ApiError.badRequest(`${field} is required`);
     }
+    // Optional now. What the customer actually buys is decided at conversion, where the
+    // catalogue and its prices are in front of the caller — demanding it at capture meant
+    // guessing the sale before the conversation had happened.
     const medicines: { name: string; days?: number | string }[] = Array.isArray(body.medicines)
       ? body.medicines
       : [];
-    if (medicines.length === 0) throw ApiError.badRequest('at least one medicine is required');
 
     // A caller's lead is force-assigned to them; only an admin may assign elsewhere.
     const assignedCallerId = isAdmin(actor) ? (body.assignedCaller ?? null) : actor.userId;
@@ -195,17 +197,13 @@ leadsRouter.patch(
     const before = await db.lead.findFirst({ where: { id: param(req, 'id'), deletedAt: null } });
     if (!before) throw ApiError.notFound('Lead not found');
 
-    // Selling requires the details that make an order fulfillable. Pincode is not among them
-    // by decision: it is optional everywhere, including here, and is filled in later when the
-    // parcel is actually addressed.
+    // Marking a lead sold needs somewhere to send it, and nothing more. Payment proof is
+    // captured when converting, which is the path that actually takes the money; requiring it
+    // here as well asked for the same image twice. Pincode is optional everywhere.
     const targetStatus = 'status' in body ? body.status : before.status;
     if (targetStatus === 'sold') {
       const address = 'address' in body ? body.address : before.address;
-      const screenshot = 'paymentScreenshot' in body ? body.paymentScreenshot : before.paymentScreenshot;
       if (!String(address ?? '').trim()) throw ApiError.badRequest('Address is required when Lead Status is Sold');
-      if (!String(screenshot ?? '').trim()) {
-        throw ApiError.badRequest('Payment Screenshot is required when Lead Status is Sold');
-      }
     }
 
     if ('assignedCaller' in body) assertLeadAssignable(actor, body.assignedCaller ?? null);
@@ -345,6 +343,9 @@ leadsRouter.post(
       param(req, 'id'),
       {
         paymentScreenshot: body.paymentScreenshot,
+        // The sale as composed in the dialog. Leads no longer carry medicines, so this is the
+        // only source for what is being bought.
+        items: Array.isArray(body.items) ? body.items : [],
         discountType: body.discountType,
         discountValue: body.discountValue,
       },

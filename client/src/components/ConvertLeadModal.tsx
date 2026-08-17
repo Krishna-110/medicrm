@@ -1,23 +1,36 @@
-import { useEffect, useId, useState } from 'react'
-import { AlertTriangle, Upload, X } from 'lucide-react'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { AlertTriangle, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { leadsApi, type ConversionPreview, type ConvertPayload } from '@/api/leads'
+import { useApp } from '@/context/AppContext'
 import { emitToast } from '@/lib/toast'
 import type { Lead } from '@/types'
 
 type DiscountType = ConvertPayload['discountType']
 
+/** The tenures sold. One unit per day, so tenure is both the supply period and the quantity. */
+const TENURES = [15, 30, 60, 90] as const
+const DEFAULT_TENURE = 30
+
 const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+type SaleLine = { id: string; name: string; days: number }
+
+let lineSeq = 0
+const emptyLine = (): SaleLine => ({ id: `sale-${++lineSeq}`, name: '', days: DEFAULT_TENURE })
+
 /**
- * Confirming a conversion: what it will cost, what discount applies, and proof of payment.
+ * Composing a sale: which medicines, for how long, what it costs, and proof of payment.
  *
- * Shared by the leads list and the lead detail page. Both used to open their own one-line
- * "are you sure?" dialog, so a rule added to one would have silently missed the other.
+ * The medicines are chosen here rather than on the lead. A lead is a conversation — what the
+ * customer ends up buying is settled at the point of sale, with the catalogue and its prices
+ * in front of the caller, so asking for it at capture meant guessing.
  *
- * Prices are read-only and come from the server's own quote rather than being recomputed
- * here — the figure shown is produced by the code that goes on to bill it.
+ * Pricing is computed here from the catalogue already in the store, which is what makes the
+ * total move as lines are added. The server re-prices from its own copy before billing, so
+ * this figure is a faithful preview rather than the authority.
  */
 export function ConvertLeadModal({
   lead,
@@ -29,38 +42,70 @@ export function ConvertLeadModal({
   onConverted: (result: Awaited<ReturnType<typeof leadsApi.convert>>) => void
 }) {
   const id = useId()
+  const { state } = useApp()
   const [preview, setPreview] = useState<ConversionPreview | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [lines, setLines] = useState<SaleLine[]>([emptyLine()])
   const [discountType, setDiscountType] = useState<DiscountType>('none')
   const [discountValue, setDiscountValue] = useState('')
   const [screenshot, setScreenshot] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  // Reset per lead, so a discount typed for one is never carried into the next.
-  //
-  // The screenshot is the exception: a lead marked sold already carries proof of payment, and
-  // asking for the same image twice is asking the user to find it again for no reason. It
-  // prefills, and stays replaceable.
+  // Reset per lead, so a sale composed for one is never carried into the next.
   useEffect(() => {
     if (!lead) return
     setPreview(null)
     setLoadError(null)
+    setLines([emptyLine()])
     setDiscountType('none')
     setDiscountValue('')
-    setScreenshot(lead.paymentScreenshot ?? '')
+    setScreenshot('')
 
     let cancelled = false
     leadsApi
       .convertPreview(lead.id)
       .then(p => { if (!cancelled) setPreview(p) })
       .catch((e: unknown) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Could not price this lead')
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Could not open this lead for conversion')
       })
     return () => { cancelled = true }
   }, [lead])
 
+  const medicineOptions = useMemo(
+    () => state.medicines
+      .filter(m => m.isActive)
+      .map(m => ({ id: m.id, label: m.name, sublabel: money(m.unitPrice) })),
+    [state.medicines],
+  )
+
+  const setLine = (lineId: string, patch: Partial<SaleLine>) =>
+    setLines(rows => rows.map(r => (r.id === lineId ? { ...r, ...patch } : r)))
+
+  /*
+   * Each line priced against the catalogue, and checked against the seller's location — the
+   * lead's caller's, which the preview named. Stock is per location, so the global total
+   * would happily approve a sale the shelf cannot cover.
+   */
+  const priced = useMemo(() => lines.map(line => {
+    const medicine = state.medicines.find(m => m.name.toLowerCase() === line.name.trim().toLowerCase())
+    const unitPrice = medicine?.unitPrice ?? 0
+    const stock = medicine && preview?.locationName
+      ? medicine.locations?.find(l => l.locationName === preview.locationName)?.quantity ?? 0
+      : null
+    return {
+      ...line,
+      medicine,
+      unitPrice,
+      lineTotal: unitPrice * line.days,
+      stock,
+      covered: stock === null ? false : stock >= line.days,
+    }
+  }), [lines, state.medicines, preview])
+
+  const chosen = priced.filter(p => p.name.trim())
+  const total = chosen.reduce((sum, p) => sum + p.lineTotal, 0)
+
   const raw = Number(discountValue) || 0
-  const total = preview?.totalAmount ?? 0
   const discountAmount =
     discountType === 'flat' ? Math.min(raw, total)
     : discountType === 'percentage' ? (total * Math.min(raw, 100)) / 100
@@ -69,16 +114,12 @@ export function ConvertLeadModal({
 
   const discountInvalid =
     discountType !== 'none' && (raw < 0 || (discountType === 'percentage' && raw > 100))
-  // Keyed on the price, not on catalogue membership: a medicine can be in the catalogue and
-  // still have no unit price set, which bills exactly as badly as one that is missing.
-  const unpriced = preview?.items.filter(i => i.lineTotal === 0) ?? []
-  const notListed = unpriced.filter(i => !i.inCatalogue)
-  // Days are units, so a line the caller's location can't cover blocks the sale — the server
-  // refuses it too, but catching it here means the user isn't asked for a screenshot first.
   const noLocation = !!preview && preview.locationName === null
-  const short = noLocation ? [] : (preview?.items.filter(i => !i.covered) ?? [])
+  const unknown = chosen.filter(p => !p.medicine)
+  const short = noLocation ? [] : chosen.filter(p => p.medicine && !p.covered)
   const canSubmit =
-    !!preview && !noLocation && !!screenshot && !discountInvalid && short.length === 0 && !submitting
+    !!preview && !noLocation && chosen.length > 0 && unknown.length === 0 &&
+    !!screenshot && !discountInvalid && short.length === 0 && !submitting
 
   async function handleConfirm() {
     if (!lead || !canSubmit) return
@@ -86,6 +127,7 @@ export function ConvertLeadModal({
     try {
       onConverted(await leadsApi.convert(lead.id, {
         paymentScreenshot: screenshot,
+        items: chosen.map(p => ({ name: p.name.trim(), days: p.days })),
         discountType,
         discountValue: discountType === 'none' ? 0 : raw,
       }))
@@ -108,34 +150,66 @@ export function ConvertLeadModal({
           <p className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{loadError}</p>
         )}
 
-        {/* Order lines — priced by the catalogue, not editable here. */}
+        {/* The sale itself. */}
         <div>
-          <span className="field-label">Order summary</span>
-          <div className="overflow-hidden rounded-xl border border-ink-100">
-            {!preview && !loadError && (
-              <p className="px-3 py-4 text-center text-sm text-ink-400">Pricing…</p>
-            )}
-            {preview?.items.map((item, i) => (
-              <div
-                key={`${item.name}-${i}`}
-                className="flex items-start justify-between gap-3 border-b border-ink-100 px-3 py-2.5 last:border-b-0"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink-800">{item.name}</p>
-                  <p className="text-xs text-ink-400">
-                    {item.quantity} × {money(item.unitPrice)}
-                    {!item.inCatalogue && ' · not in catalogue'}
-                  </p>
-                  {!item.covered && (
-                    <p className="text-xs font-medium text-danger-600">
-                      Only {item.stock} in stock, {item.quantity} needed
-                    </p>
-                  )}
+          <span className="field-label">Medicines</span>
+          <div className="space-y-2">
+            {priced.map((line, idx) => (
+              <div key={line.id} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="w-full min-w-0 sm:flex-1">
+                  <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Medicine</span>
+                  <SearchableSelect
+                    value={line.name}
+                    onChange={name => setLine(line.id, { name })}
+                    options={medicineOptions}
+                    placeholder="Search medicines..."
+                    ariaLabel={`Medicine ${idx + 1}`}
+                    emptyText="No medicines found"
+                  />
                 </div>
-                <span className="shrink-0 text-sm font-medium text-ink-800">{money(item.lineTotal)}</span>
+                <div className="flex w-full items-stretch gap-2 sm:w-auto">
+                  <div className="flex flex-1 flex-col sm:w-24 sm:flex-none">
+                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`${id}-tenure-${line.id}`}>Tenure</label>
+                    <select
+                      id={`${id}-tenure-${line.id}`}
+                      value={line.days}
+                      onChange={e => setLine(line.id, { days: Number(e.target.value) })}
+                      aria-label={`Tenure for medicine ${idx + 1}`}
+                      className="field-input"
+                    >
+                      {TENURES.map(t => <option key={t} value={t}>{t} days</option>)}
+                    </select>
+                  </div>
+                  {/* Invisible labels keep these level with the two above at every width. */}
+                  <div className="flex flex-col">
+                    <span aria-hidden className="mb-0.5 block text-[10px] uppercase tracking-wide opacity-0">.</span>
+                    <span className="field-input flex min-w-[92px] items-center justify-end border-transparent bg-transparent font-medium text-ink-800">
+                      {money(line.lineTotal)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span aria-hidden className="mb-0.5 block text-[10px] uppercase tracking-wide opacity-0">.</span>
+                    <button
+                      type="button"
+                      onClick={() => setLines(rows => (rows.length === 1 ? [emptyLine()] : rows.filter(r => r.id !== line.id)))}
+                      aria-label={`Remove medicine ${idx + 1}`}
+                      className="field-input flex items-center justify-center border-transparent bg-transparent px-2 text-ink-400 transition-colors hover:text-danger-600"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => setLines(rows => [...rows, emptyLine()])}
+            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+          >
+            <Plus size={14} /> Add another medicine
+          </button>
+
           {noLocation && (
             <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-danger-600">
               <AlertTriangle size={14} className="mt-px shrink-0" />
@@ -145,26 +219,19 @@ export function ConvertLeadModal({
               </span>
             </p>
           )}
+          {unknown.length > 0 && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-danger-600">
+              <AlertTriangle size={14} className="mt-px shrink-0" />
+              <span>Pick {unknown.length === 1 ? 'a medicine' : 'medicines'} from the catalogue — {unknown.map(i => i.name).join(', ')} {unknown.length === 1 ? 'is' : 'are'} not in it.</span>
+            </p>
+          )}
           {short.length > 0 && (
             <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-danger-600">
               <AlertTriangle size={14} className="mt-px shrink-0" />
               <span>
-                Not enough stock at{' '}
-                <span className="font-semibold">{preview?.locationName}</span> to fulfil{' '}
-                {short.map(i => i.name).join(', ')}. Ask an admin to update the stock before converting.
-              </span>
-            </p>
-          )}
-          {unpriced.length > 0 && (
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-warning-700">
-              <AlertTriangle size={14} className="mt-px shrink-0" />
-              <span>
-                {unpriced.length === 1 ? 'One medicine has' : `${unpriced.length} medicines have`} no
-                price, so this order will bill{' '}
-                {unpriced.length === preview?.items.length ? 'nothing' : 'less than expected'}.
-                {notListed.length > 0
-                  ? ` Not in the catalogue: ${notListed.map(i => i.name).join(', ')}.`
-                  : ' Set a unit price under Stock.'}
+                Not enough stock at <span className="font-semibold">{preview?.locationName}</span> for{' '}
+                {short.map(i => `${i.name} (${i.stock} left, ${i.days} needed)`).join(', ')}. Ask an
+                admin to update the stock before converting.
               </span>
             </p>
           )}

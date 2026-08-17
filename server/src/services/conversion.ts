@@ -63,26 +63,32 @@ export type QuoteLine = {
  * figure the user approves is produced by the same code that later bills it. Computing the
  * preview separately would have been easy and would have drifted.
  */
-export async function quoteLead(
+/** A medicine and its tenure, as chosen at the point of sale. */
+export type QuoteRequest = { productId?: string | null; name: string; days: number };
+
+/**
+ * Prices an explicit list of medicines.
+ *
+ * The list arrives from the conversion dialog, where the sale is actually composed. It used
+ * to be read off the lead, which meant the medicines had to be guessed at capture time —
+ * before anyone knew what the customer would buy.
+ */
+export async function quoteItems(
   db: Pick<Prisma.TransactionClient, 'product'>,
-  lead: LeadWithMedicines,
+  items: QuoteRequest[],
   fallbackUnitPrice: Prisma.Decimal | number = 0,
 ): Promise<{ lines: QuoteLine[]; totalAmount: Prisma.Decimal }> {
   // One unit per day of supply: days is the quantity. Twenty days is twenty units, billed at
-  // twenty times the unit price and taking twenty off stock. Falls back to the lead's single
-  // denormalised medicine when no rows exist — older leads predate lead_medicines and must
-  // still be convertible.
-  const requested = lead.medicines.length
-    ? lead.medicines.map((m) => {
-        const days = m.days || DEFAULT_SUPPLY_DAYS;
-        return { productId: m.productId, name: m.medicineName, days, quantity: days };
-      })
-    : lead.medicineRequired
-      ? [{ productId: null, name: lead.medicineRequired, days: DEFAULT_SUPPLY_DAYS, quantity: DEFAULT_SUPPLY_DAYS }]
-      : [];
+  // twenty times the unit price and taking twenty off stock.
+  const requested = items
+    .map((m) => {
+      const days = Number(m.days) || DEFAULT_SUPPLY_DAYS;
+      return { productId: m.productId ?? null, name: String(m.name ?? '').trim(), days, quantity: days };
+    })
+    .filter((m) => m.name);
 
   if (requested.length === 0) {
-    throw ApiError.badRequest('This lead has no medicines to convert');
+    throw ApiError.badRequest('Choose at least one medicine to convert this lead');
   }
 
   const lines: QuoteLine[] = [];
@@ -143,11 +149,18 @@ async function loadConvertibleLead(db: Prisma.TransactionClient, actor: Actor, l
 }
 
 /**
- * The priced lines the conversion dialog shows before anything is written.
+ * Whether this lead can be converted, and where it would sell from.
+ *
+ * It no longer prices anything: the medicines are chosen in the dialog now, not carried on
+ * the lead, so there is nothing to quote until the user has composed the sale. What the
+ * dialog cannot work out for itself is which location the stock would leave — that follows
+ * the lead's assigned caller, not whoever is looking at the screen — so that is what this
+ * answers. Prices and stock come from the catalogue the client already holds, and the
+ * conversion re-prices authoritatively from its own copy before billing anything.
  *
  * Runs the same ownership and already-converted checks as the conversion, so a lead that
- * cannot be converted says so when the dialog opens rather than after the user has uploaded
- * a screenshot and pressed confirm.
+ * cannot be converted says so when the dialog opens rather than after the user has composed
+ * an order and uploaded a screenshot.
  */
 export async function previewConversion(actor: Actor, leadId: string) {
   // Read through the scoped client, so someone else's lead is simply absent and this answers
@@ -156,45 +169,29 @@ export async function previewConversion(actor: Actor, leadId: string) {
   // someone with no business knowing that.
   const lead = await scopedFor(actor).lead.findFirst({
     where: { id: leadId, deletedAt: null },
-    include: { medicines: { orderBy: { createdAt: 'asc' } } },
+    select: { id: true, status: true, assignedCallerId: true },
   });
   if (!lead) throw ApiError.notFound('Lead not found');
   if (lead.status === 'converted') {
     throw ApiError.badRequest('This lead has already been converted');
   }
 
-  const { lines, totalAmount } = await quoteLead(prisma, lead);
-
-  // Stock is checked against the seller's location — the lead's assigned caller's — not a
-  // global total. Resolved softly so the dialog can explain a missing caller or location
-  // rather than the whole preview failing; the conversion itself enforces it hard.
+  // Resolved softly so the dialog can explain a missing caller or location rather than the
+  // whole preview failing; the conversion itself enforces it hard.
   const caller = lead.assignedCallerId
-    ? await prisma.user.findUnique({ where: { id: lead.assignedCallerId }, select: { locationId: true, location: { select: { name: true } } } })
+    ? await prisma.user.findUnique({
+        where: { id: lead.assignedCallerId },
+        select: { location: { select: { name: true } } },
+      })
     : null;
-  const locationId = caller?.locationId ?? null;
-  const locationName = caller?.location?.name ?? null;
 
-  const items = await Promise.all(
-    lines.map(async (l) => {
-      const stock = l.productId && locationId ? await stockAt(prisma, l.productId, locationId) : null;
-      return {
-        name: l.name,
-        quantity: l.quantity,
-        unitPrice: Number(l.unitPrice),
-        lineTotal: Number(l.lineTotal),
-        inCatalogue: l.productId !== null,
-        stock,
-        // No location means nothing is coverable; the dialog blocks on locationName === null.
-        covered: locationId === null ? false : stock === null || stock >= l.quantity,
-      };
-    }),
-  );
-
-  return { items, totalAmount: Number(totalAmount), locationName };
+  return { locationName: caller?.location?.name ?? null };
 }
 
 export type ConversionInput = {
   paymentScreenshot: string;
+  /** The sale, as composed in the dialog: which medicines, and for how many days each. */
+  items: QuoteRequest[];
   discountType?: 'none' | 'flat' | 'percentage';
   discountValue?: Prisma.Decimal | number;
 };
@@ -285,7 +282,9 @@ export async function convertLeadToOrder(
 
     // ── 3. one line per requested medicine ───────────────────────────────────────────────
     // Priced by the same function that produced the preview the user just approved.
-    const { lines, totalAmount } = await quoteLead(tx, lead, fallbackUnitPrice);
+    // Re-priced here from the catalogue rather than trusting the figures the dialog showed:
+    // the client computes the same total for display, but this is the copy that bills.
+    const { lines, totalAmount } = await quoteItems(tx, input.items ?? [], fallbackUnitPrice);
 
     // Every catalogue line must be coverable at the seller's location before anything is
     // written, so a shortfall rejects the whole order rather than half-filling it.
