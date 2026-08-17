@@ -721,6 +721,34 @@ describe('follow-up scheduling stays in step with the lead', () => {
   });
 });
 
+describe('pincode', () => {
+  it('is not needed to record a lead, but is needed to sell one', async () => {
+    // Taken down over the phone, a pincode often is not known yet. Refusing the whole lead
+    // for it lost leads that were otherwise complete.
+    const payload = leadPayload({ assignedCaller: caller.userId });
+    delete (payload as Record<string, unknown>).pincode;
+    const created = await as(admin).post('/api/leads', payload);
+    expect(created.status).toBe(201);
+    expect(created.body.pincode ?? '').toBe('');
+
+    // Selling is where it starts to matter, because something has to be shipped.
+    const sold = await as(admin).patch(`/api/leads/${created.body.id}`, {
+      status: 'sold',
+      paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
+    });
+    expect(sold.status).toBe(400);
+    expect(String(sold.body.error)).toMatch(/pincode/i);
+
+    // Supplied, it goes through.
+    const ok = await as(admin).patch(`/api/leads/${created.body.id}`, {
+      status: 'sold',
+      pincode: '400001',
+      paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
+    });
+    expect(ok.status).toBe(200);
+  });
+});
+
 describe('a write reports what it caused', () => {
   it('converting returns the renewals it opened, one per medicine', async () => {
     await setStock('Atorva', 999);

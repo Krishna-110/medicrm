@@ -79,7 +79,13 @@ async function createLeadMedicine(
   });
 }
 
-const REQUIRED = ['customerName', 'mobile', 'address', 'city', 'state', 'pincode', 'disease'] as const;
+/**
+ * Pincode is deliberately absent: a caller taking a number down over the phone often does not
+ * have it yet, and demanding it to record the lead at all lost leads that were otherwise
+ * complete. It is still required to mark one Sold, below, because that is the point at which
+ * something has to be shipped.
+ */
+const REQUIRED = ['customerName', 'mobile', 'address', 'city', 'state', 'disease'] as const;
 
 leadsRouter.get(
   '/',
@@ -136,7 +142,10 @@ leadsRouter.post(
           address: body.address,
           city: body.city,
           state: body.state,
-          pincode: body.pincode,
+          // Empty rather than null: the column is NOT NULL, and every read already treats a
+          // blank pincode as absent — the shipping address joins on truthiness, and the Sold
+          // check trims before testing. Not worth a migration to say the same thing.
+          pincode: body.pincode ?? '',
           doctorName: body.doctorName ?? null,
           disease: body.disease,
           notes: body.notes ?? null,

@@ -108,7 +108,8 @@ const emptyForm: LeadForm = {
   medicines: [{ id: 'new-medicine-1', name: '', days: '1' }],
   doctorName: '',
   notes: '',
-  leadSource: 'phone',
+  // Where most leads actually come from, so the common case needs no touch.
+  leadSource: 'social_media',
   assignedCaller: '',
   status: 'new',
   nextFollowUp: '',
@@ -596,11 +597,13 @@ export function Leads() {
               />
             </div>
             <div>
-              <label className="field-label" htmlFor="leads-pincode">Pincode</label>
+              {/* Optional at capture — a caller taking a number down rarely has it yet. It
+                  becomes required only when the lead is marked Sold, since nothing ships
+                  without one. */}
+              <label className="field-label" htmlFor="leads-pincode">Pincode <span className="font-normal text-ink-400">(optional)</span></label>
               <input
                 id="leads-pincode"
                 type="text"
-                required
                 value={form.pincode}
                 onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))}
                 className="field-input"
