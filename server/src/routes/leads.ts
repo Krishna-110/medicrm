@@ -195,14 +195,14 @@ leadsRouter.patch(
     const before = await db.lead.findFirst({ where: { id: param(req, 'id'), deletedAt: null } });
     if (!before) throw ApiError.notFound('Lead not found');
 
-    // Selling requires the details that make an order fulfillable.
+    // Selling requires the details that make an order fulfillable. Pincode is not among them
+    // by decision: it is optional everywhere, including here, and is filled in later when the
+    // parcel is actually addressed.
     const targetStatus = 'status' in body ? body.status : before.status;
     if (targetStatus === 'sold') {
       const address = 'address' in body ? body.address : before.address;
-      const pincode = 'pincode' in body ? body.pincode : before.pincode;
       const screenshot = 'paymentScreenshot' in body ? body.paymentScreenshot : before.paymentScreenshot;
       if (!String(address ?? '').trim()) throw ApiError.badRequest('Address is required when Lead Status is Sold');
-      if (!String(pincode ?? '').trim()) throw ApiError.badRequest('Pincode is required when Lead Status is Sold');
       if (!String(screenshot ?? '').trim()) {
         throw ApiError.badRequest('Payment Screenshot is required when Lead Status is Sold');
       }

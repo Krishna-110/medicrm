@@ -305,10 +305,6 @@ export function Leads() {
         emitToast('Customer Address is required when Lead Status is Sold')
         return null
       }
-      if (!form.pincode.trim()) {
-        emitToast('Pincode is required when Lead Status is Sold')
-        return null
-      }
       if (!form.paymentScreenshot.trim()) {
         emitToast('Payment Screenshot is required when Lead Status is Sold')
         return null

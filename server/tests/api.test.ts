@@ -722,30 +722,33 @@ describe('follow-up scheduling stays in step with the lead', () => {
 });
 
 describe('pincode', () => {
-  it('is not needed to record a lead, but is needed to sell one', async () => {
-    // Taken down over the phone, a pincode often is not known yet. Refusing the whole lead
-    // for it lost leads that were otherwise complete.
+  it('is optional everywhere — a lead records and sells without one', async () => {
+    // Taken down over the phone, a pincode often is not known yet. Refusing the lead for it
+    // lost leads that were otherwise complete, and refusing the sale for it blocked a sale
+    // that had already happened.
     const payload = leadPayload({ assignedCaller: caller.userId });
     delete (payload as Record<string, unknown>).pincode;
     const created = await as(admin).post('/api/leads', payload);
     expect(created.status).toBe(201);
     expect(created.body.pincode ?? '').toBe('');
 
-    // Selling is where it starts to matter, because something has to be shipped.
     const sold = await as(admin).patch(`/api/leads/${created.body.id}`, {
       status: 'sold',
       paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
     });
-    expect(sold.status).toBe(400);
-    expect(String(sold.body.error)).toMatch(/pincode/i);
+    expect(sold.status).toBe(200);
+    expect(sold.body.status).toBe('sold');
+  });
 
-    // Supplied, it goes through.
-    const ok = await as(admin).patch(`/api/leads/${created.body.id}`, {
+  it('still refuses a sale with no address, which pincode does not stand in for', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const res = await as(admin).patch(`/api/leads/${lead.id}`, {
       status: 'sold',
-      pincode: '400001',
+      address: '',
       paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
     });
-    expect(ok.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/address/i);
   });
 });
 
