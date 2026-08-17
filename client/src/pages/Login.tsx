@@ -58,7 +58,7 @@ export function Login() {
         />
 
         <div className="relative flex items-center gap-2.5">
-          <img src="/logo.png" alt="Abhyasa Crm" className="h-10 w-auto rounded-lg bg-[#1b1c1c] px-1.5 py-1" />
+          <img src="/logo-light.png" alt="Abhyasa Crm" className="h-11 w-auto" />
         </div>
 
         <p className="relative mt-4 max-w-xs text-[15px] font-medium leading-snug text-primary-100">
@@ -103,7 +103,7 @@ export function Login() {
         />
 
         <div className="relative flex items-center gap-2.5">
-          <img src="/logo.png" alt="Abhyasa Crm" className="h-[68px] w-auto rounded-xl bg-[#1b1c1c] px-3 py-2" />
+          <img src="/logo-light.png" alt="Abhyasa Crm" className="h-14 w-auto" />
         </div>
 
         <div className="relative">

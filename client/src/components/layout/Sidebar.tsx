@@ -127,16 +127,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex h-16 items-center gap-2.5 px-5">
-          {/*
-            * The artwork carries its own near-black backdrop and its "ayurveda" line is white,
-            * so it is framed on that same colour rather than dropped onto the white sidebar,
-            * where the lower word would simply disappear.
-            */}
-          <img
-            src="/logo.png"
-            alt="Abhyasa Crm"
-            className="h-10 w-auto rounded-lg bg-[#1b1c1c] px-1.5 py-1"
-          />
+          {/* The dark-lettered cut, since this sidebar is white. See public/logo-light.png
+              for the reverse, used on the login panel. */}
+          <img src="/logo-dark.png" alt="Abhyasa Crm" className="h-9 w-auto" />
           <button
             onClick={onClose}
             className="ml-auto rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 lg:hidden"
