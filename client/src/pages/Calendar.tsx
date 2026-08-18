@@ -85,7 +85,9 @@ const TYPE_BADGE_VARIANT: Record<FollowUp['type'], 'primary' | 'info' | 'warning
 export function Calendar() {
   const { state, dispatch } = useApp()
   const navigate = useNavigate()
-  const [viewMode, setViewMode] = useState<ViewMode>('monthly')
+  // Opens on today's calls. A month grid answers "when is everything", which is the rarer
+  // question — the page is opened to find out who to ring now.
+  const [viewMode, setViewMode] = useState<ViewMode>('daily')
   const [currentDate, setCurrentDate] = useState(TODAY)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
