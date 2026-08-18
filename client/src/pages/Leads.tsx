@@ -6,7 +6,8 @@ import { leadsApi } from '@/api/leads'
 import { followUpsApi } from '@/api/followUps'
 import { emitToast } from '@/lib/toast'
 import { formatIndianDate } from '@/lib/dateUtils'
-import type { Lead, LeadStatus, LeadSource } from '@/types'
+import type { FollowUpSlot, Lead, LeadStatus, LeadSource } from '@/types'
+import { FOLLOW_UP_SLOTS } from '@/lib/followUpSlots'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -79,6 +80,7 @@ type LeadForm = {
   assignedCaller: string
   status: LeadStatus
   nextFollowUp: string
+  followUpSlot: FollowUpSlot | ''
 }
 
 const emptyForm: LeadForm = {
@@ -97,6 +99,7 @@ const emptyForm: LeadForm = {
   assignedCaller: '',
   status: 'new',
   nextFollowUp: '',
+  followUpSlot: '',
 }
 
 export function Leads() {
@@ -213,6 +216,9 @@ export function Leads() {
       assignedCaller: lead.assignedCaller ?? '',
       status: lead.status,
       nextFollowUp: lead.nextFollowUp ?? '',
+      // The slot already agreed, so reopening the form shows it back rather than resetting to
+      // "Any time" and quietly clearing it on the next save.
+      followUpSlot: state.followUps.find(f => f.leadId === lead.id && f.status === 'pending')?.slot ?? '',
     })
     setShowModal(true)
   }
@@ -276,6 +282,7 @@ export function Leads() {
       ...(editingLead ? {
         status: form.status,
         nextFollowUp: form.nextFollowUp || undefined,
+        followUpSlot: form.followUpSlot || undefined,
       } : {}),
     }
 
@@ -663,6 +670,21 @@ export function Leads() {
                     onChange={value => setForm(f => ({ ...f, nextFollowUp: value }))}
                   />
                 </div>
+                {/* Only once there is a day to put a slot in. */}
+                {form.nextFollowUp && (
+                  <div>
+                    <label className="field-label" htmlFor="leads-follow-up-slot">Time Slot</label>
+                    <select
+                      id="leads-follow-up-slot"
+                      value={form.followUpSlot}
+                      onChange={e => setForm(f => ({ ...f, followUpSlot: e.target.value as FollowUpSlot | '' }))}
+                      className="field-input"
+                    >
+                      <option value="">Any time</option>
+                      {FOLLOW_UP_SLOTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
             </>

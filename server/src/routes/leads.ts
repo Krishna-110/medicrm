@@ -5,6 +5,7 @@ import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
+import { parseFollowUpSlot } from '../lib/vocab.js';
 import { FOLLOW_UP_CONTACT, serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import type { ActivityCreateResponse, ConvertResponse } from '../lib/contract.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
@@ -197,6 +198,14 @@ leadsRouter.patch(
     const before = await db.lead.findFirst({ where: { id: param(req, 'id'), deletedAt: null } });
     if (!before) throw ApiError.notFound('Lead not found');
 
+    // Rejected before the transaction opens, so a slot the app does not offer costs nothing.
+    let followUpSlot;
+    try {
+      followUpSlot = parseFollowUpSlot(body.followUpSlot);
+    } catch (e) {
+      throw ApiError.badRequest(e instanceof Error ? e.message : 'Invalid slot');
+    }
+
     // Marking a lead sold needs somewhere to send it, and nothing more. Payment proof is
     // captured when converting, which is the path that actually takes the money; requiring it
     // here as well asked for the same image twice. Pincode is optional everywhere.
@@ -250,7 +259,13 @@ leadsRouter.patch(
       // the calendar and the lead's own follow-up list never read, so the date showed in the
       // leads table and the task it implied existed nowhere.
       if ('nextFollowUp' in body) {
-        await scheduleNextFollowUp(tx, actor, updated, toDateOrNull('nextFollowUp', body.nextFollowUp));
+        await scheduleNextFollowUp(
+          tx,
+          actor,
+          updated,
+          toDateOrNull('nextFollowUp', body.nextFollowUp),
+          followUpSlot,
+        );
       }
 
       await auditUpdate(tx, actor, 'leads', before, updated);
@@ -393,6 +408,7 @@ leadsRouter.post(
           customerId: lead.customerId,
           customerName: lead.customerName,
           scheduledAt: when,
+          slot: parseFollowUpSlot(body.slot),
           type: body.type ?? 'call',
           status: 'pending',
           notes: body.notes ?? null,

@@ -11,6 +11,7 @@ import { changeStock, resolveSellerLocation, stockAt } from '../services/invento
 import { lineTotal, nextOrderNumber, payableAmount } from '../services/orders.js';
 import { auditCreate } from '../services/audit.js';
 import { addDays, istDayDiff } from '../lib/dates.js';
+import { parseFollowUpSlot } from '../lib/vocab.js';
 
 export const renewalsRouter = Router();
 
@@ -228,6 +229,12 @@ renewalsRouter.post(
     // caller's list today — "schedule" that could not schedule.
     const when = toDateOrNull('scheduledDate', req.body?.scheduledDate) ?? renewal.renewalDate;
     const notes = req.body?.notes ?? null;
+    let slot;
+    try {
+      slot = parseFollowUpSlot(req.body?.slot);
+    } catch (e) {
+      throw ApiError.badRequest(e instanceof Error ? e.message : 'Invalid slot');
+    }
 
     // One pending reminder per renewal, moved rather than stacked. The button had no guard,
     // so pressing it twice — easy on a phone — left two identical tasks to be completed
@@ -241,7 +248,7 @@ renewalsRouter.post(
     const followUp = existing
       ? await prisma.followUp.update({
           where: { id: existing.id },
-          data: { scheduledAt: when, notes },
+          data: { scheduledAt: when, notes, slot },
           include: FOLLOW_UP_CONTACT,
         })
       : await prisma.followUp.create({
@@ -250,6 +257,7 @@ renewalsRouter.post(
             customerName: renewal.customerName,
             renewalId: renewal.id,
             scheduledAt: when,
+            slot,
             type: 'reminder',
             status: 'pending',
             notes,

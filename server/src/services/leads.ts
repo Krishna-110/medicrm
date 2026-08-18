@@ -1,5 +1,6 @@
 import type { Tx } from '../db/prisma.js';
 import type { Actor } from '../auth/scope.js';
+import type { FollowUpSlot } from '../lib/vocab.js';
 
 /**
  * Lead bookkeeping that used to be trigger work.
@@ -95,6 +96,8 @@ export async function scheduleNextFollowUp(
   actor: Actor,
   lead: { id: string; customerId: string | null; customerName: string; assignedCallerId: string | null },
   when: Date | null,
+  /** The part of the day agreed with the customer, or null when none was. */
+  slot: FollowUpSlot | null = null,
 ): Promise<void> {
   const existing = await tx.followUp.findFirst({
     where: { leadId: lead.id, deletedAt: null, status: 'pending' },
@@ -104,7 +107,7 @@ export async function scheduleNextFollowUp(
 
   if (when) {
     if (existing) {
-      await tx.followUp.update({ where: { id: existing.id }, data: { scheduledAt: when } });
+      await tx.followUp.update({ where: { id: existing.id }, data: { scheduledAt: when, slot } });
     } else {
       await tx.followUp.create({
         data: {
@@ -112,7 +115,8 @@ export async function scheduleNextFollowUp(
           customerId: lead.customerId,
           customerName: lead.customerName,
           scheduledAt: when,
-          // The form offers a date and nothing else, so this matches the default used when a
+          slot,
+          // The form offers a date and a slot, so this matches the default used when a
           // follow-up is created explicitly without a type.
           type: 'call',
           status: 'pending',

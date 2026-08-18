@@ -63,4 +63,21 @@ export type RenewalStatus = 'upcoming' | 'due_today' | 'overdue' | 'renewed';
 export type FollowUpType = 'call' | 'reminder' | 'callback';
 export type FollowUpStatus = 'pending' | 'completed' | 'missed';
 
+/**
+ * The part of the day a customer asked to be called in.
+ *
+ * Buckets rather than a clock time: nobody agrees to be rung at 14:05, they agree to an
+ * afternoon. A stored time would have implied a precision the conversation never had.
+ */
+export const FOLLOW_UP_SLOTS = ['morning', 'afternoon', 'evening'] as const;
+export type FollowUpSlot = (typeof FOLLOW_UP_SLOTS)[number];
+
+/** The slot as sent by a client, or null. Anything unrecognised is refused rather than kept. */
+export function parseFollowUpSlot(value: unknown): FollowUpSlot | null {
+  if (value == null || value === '') return null;
+  const slot = String(value);
+  if ((FOLLOW_UP_SLOTS as readonly string[]).includes(slot)) return slot as FollowUpSlot;
+  throw new Error(`slot must be one of ${FOLLOW_UP_SLOTS.join(', ')}`);
+}
+
 export type NotificationType = 'info' | 'warning' | 'success' | 'error';

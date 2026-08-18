@@ -5,11 +5,11 @@
  */
 export type {
   DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
-  LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, RenewalStatus, UserRole, UserStatus,
+  FollowUpSlot, LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, RenewalStatus, UserRole, UserStatus,
 } from '../../../server/src/lib/vocab.js';
 import type {
   DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
-  LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, RenewalStatus, UserRole,
+  FollowUpSlot, LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, RenewalStatus, UserRole,
 } from '../../../server/src/lib/vocab.js';
 
 
@@ -148,6 +148,8 @@ export type FollowUp = {
   /** The number to ring — the lead's, or the customer record's for a renewal reminder. */
   mobile?: string;
   scheduledDate: string;
+  /** The part of the day agreed with the customer; absent when none was. */
+  slot?: FollowUpSlot;
   type: 'call' | 'reminder' | 'callback';
   status: 'pending' | 'completed' | 'missed';
   notes?: string;

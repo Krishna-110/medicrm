@@ -912,6 +912,51 @@ describe('a write reports what it caused', () => {
   });
 });
 
+describe('follow-up time slot', () => {
+  it('is set from the lead form, moves with it, and clears', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+
+    // Setting the date and a slot together, which is how the form sends it.
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: 'evening' });
+    const first = (await as(admin).get('/api/follow-ups')).body.find((f: { leadId?: string }) => f.leadId === lead.id);
+    expect(first.slot).toBe('evening');
+
+    // Changing it moves the same follow-up rather than leaving the old slot behind.
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: 'morning' });
+    const moved = (await as(admin).get('/api/follow-ups')).body.find((f: { id: string }) => f.id === first.id);
+    expect(moved.slot).toBe('morning');
+
+    // "Any time" is a real answer, not a missing one.
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: '' });
+    const cleared = (await as(admin).get('/api/follow-ups')).body.find((f: { id: string }) => f.id === first.id);
+    expect(cleared.slot).toBeUndefined();
+  });
+
+  it('refuses a slot the app does not offer', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const res = await as(admin).patch(`/api/leads/${lead.id}`, {
+      nextFollowUp: '2026-11-04',
+      followUpSlot: 'midnight',
+    });
+    expect(res.status).toBe(400);
+    expect(String(res.body.error)).toMatch(/morning, afternoon, evening/i);
+  });
+
+  it('a renewal reminder carries one too', async () => {
+    await setStock('Atorva', 999);
+    const before = new Set((await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id));
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body.filter((r: { id: string }) => !before.has(r.id));
+
+    const res = await as(admin).post(`/api/renewals/${renewal.id}/remind`, {
+      scheduledDate: '2026-11-10',
+      slot: 'afternoon',
+    });
+    expect(res.body.slot).toBe('afternoon');
+  });
+});
+
 describe('a follow-up carries the number to ring', () => {
   it('from the lead, and from the customer for a renewal reminder', async () => {
     await setStock('Atorva', 999);

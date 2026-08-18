@@ -17,7 +17,7 @@ export const renewalsApi = {
   renew: (id: string, payload: RenewPayload) => api.post<RenewResponse>(`/renewals/${id}/renew`, payload),
   // Omitting scheduledDate lets the server default it to the renewal date, which is when the
   // call is actually worth making.
-  remind: (id: string, data?: { scheduledDate?: string; notes?: string }) =>
+  remind: (id: string, data?: { scheduledDate?: string; slot?: string; notes?: string }) =>
     api.post<FollowUp>(`/renewals/${id}/remind`, data),
   cancel: (id: string) => api.delete<void>(`/renewals/${id}`),
 };

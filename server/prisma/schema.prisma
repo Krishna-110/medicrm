@@ -494,6 +494,10 @@ model FollowUp {
   scheduledAt      DateTime  @map("scheduled_at")
   type             String    @default("call")
   status           String    @default("pending")
+  /// Which part of the day the customer asked to be called in. Nullable because it is the
+  /// customer's preference, not a requirement — and because every follow-up written before
+  /// this column has none, which is honest rather than a guessed default.
+  slot             String?
   /// When the call was actually made — set on the transition into 'completed', cleared on the
   /// way back out. scheduledAt is when it was meant to happen, which is a different question:
   /// counting that as "calls today" reported calls nobody had dialled yet and missed a

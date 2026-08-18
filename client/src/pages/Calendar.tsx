@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { followUpsApi } from '@/api/followUps'
 import { emitToast } from '@/lib/toast'
 import { formatIndianDate, istToday } from '@/lib/dateUtils'
+import { slotLabel } from '@/lib/followUpSlots'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -238,10 +239,16 @@ export function Calendar() {
         {f.notes && (
           <p className="text-xs text-ink-500 line-clamp-2">{f.notes}</p>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant={getStatusBadgeVariant(f)}>
             {status}
           </Badge>
+          {slotLabel(f.slot) && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-600">
+              <Clock className="h-3 w-3" />
+              {slotLabel(f.slot)}
+            </span>
+          )}
         </div>
         {(f.mobile || (showActions && f.status !== 'completed')) && (
           <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -511,6 +518,14 @@ export function Calendar() {
                           <Badge variant={getStatusBadgeVariant(f)}>
                             {status}
                           </Badge>
+                          {/* The slot agreed with the customer, beside the status so the two
+                              read together: what state the call is in, and when to make it. */}
+                          {slotLabel(f.slot) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-xs font-medium text-ink-600">
+                              <Clock className="h-3 w-3" />
+                              {slotLabel(f.slot)}
+                            </span>
+                          )}
                         </div>
                         {f.notes && (
                           <p className="text-sm text-ink-500">{f.notes}</p>

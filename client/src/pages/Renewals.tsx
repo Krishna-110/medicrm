@@ -22,7 +22,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { DateInput } from '@/components/ui/DateInput'
 import { RenewOrderModal } from '@/components/RenewOrderModal'
-import type { Renewal, RenewalStatus } from '@/types'
+import type { FollowUpSlot, Renewal, RenewalStatus } from '@/types'
+import { FOLLOW_UP_SLOTS } from '@/lib/followUpSlots'
 import type { RenewResponse } from '../../../server/src/lib/contract.js'
 
 function getDaysRemainingPill(days: number) {
@@ -52,6 +53,7 @@ export function Renewals() {
   const [renewingRenewal, setRenewingRenewal] = useState<Renewal | null>(null)
   const [remindingRenewal, setRemindingRenewal] = useState<Renewal | null>(null)
   const [reminderDate, setReminderDate] = useState('')
+  const [reminderSlot, setReminderSlot] = useState<FollowUpSlot | ''>('')
 
   const renewals = state.renewals ?? []
 
@@ -118,6 +120,7 @@ export function Renewals() {
       f => f.renewalId === renewal.id && f.status === 'pending',
     )
     setReminderDate(existing?.scheduledDate ?? renewal.renewalDate)
+    setReminderSlot(existing?.slot ?? '')
   }
 
   async function handleScheduleReminder() {
@@ -125,6 +128,7 @@ export function Renewals() {
     try {
       const followUp = await renewalsApi.remind(remindingRenewal.id, {
         scheduledDate: reminderDate,
+        slot: reminderSlot || undefined,
         notes: `Renewal reminder call for ${remindingRenewal.medicineName}`,
       })
       // The server moves an existing pending reminder rather than stacking a second one, so
@@ -318,6 +322,18 @@ export function Renewals() {
               value={reminderDate}
               onChange={setReminderDate}
             />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="reminder-slot">Time Slot</label>
+            <select
+              id="reminder-slot"
+              value={reminderSlot}
+              onChange={e => setReminderSlot(e.target.value as FollowUpSlot | '')}
+              className="field-input"
+            >
+              <option value="">Any time</option>
+              {FOLLOW_UP_SLOTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
             <p className="mt-1.5 text-xs text-ink-400">
               Defaults to the renewal date. Setting a reminder again moves this one rather than
               adding a second.

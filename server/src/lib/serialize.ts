@@ -1,6 +1,6 @@
 import type {
   DiscountType, DosageForm, FollowUpStatus, FollowUpType, LeadActivityType, LeadSource,
-  LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, UserRole, UserStatus,
+  FollowUpSlot, LeadStatus, NotificationType, OrderStage, PaymentMode, PaymentStatus, UserRole, UserStatus,
 } from './vocab.js';
 import { Prisma } from '@prisma/client';
 import { APP_TIMEZONE, daysRemaining, renewalStatus } from './dates.js';
@@ -220,7 +220,7 @@ export const FOLLOW_UP_CONTACT = {
 
 type FollowUp = {
   id: string; leadId: string | null; renewalId: string | null; customerName: string;
-  scheduledAt: Date; type: string; status: string; notes: string | null;
+  scheduledAt: Date; type: string; status: string; notes: string | null; slot: string | null;
   lead?: { mobile: string } | null;
   customer?: { primaryMobile: string } | null;
 };
@@ -235,6 +235,9 @@ export const serializeFollowUp = (f: FollowUp) => ({
   mobile: f.lead?.mobile ?? f.customer?.primaryMobile ?? undefined,
   customerName: f.customerName,
   scheduledDate: d10(f.scheduledAt),
+  // The part of the day agreed with the customer; absent on anything scheduled before slots
+  // existed, and on a call nobody pinned to one.
+  slot: (f.slot ?? undefined) as FollowUpSlot | undefined,
   type: f.type as FollowUpType,
   status: f.status as FollowUpStatus,
   notes: f.notes ?? undefined,
