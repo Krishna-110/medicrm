@@ -12,6 +12,27 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { FollowUp } from '@/types'
 
+/**
+ * Dials the customer.
+ *
+ * An anchor with a tel: href rather than a button, because that is what hands the number to
+ * the phone's own dialer — a click handler could only copy it somewhere. Styled to match the
+ * Button beside it. On a desktop browser this opens whatever is registered for tel:, which
+ * may be nothing; on the phone the callers actually use, it opens the keypad ready to dial.
+ */
+function CallButton({ mobile, name }: { mobile: string; name: string }) {
+  return (
+    <a
+      href={`tel:${mobile.replace(/[^\d+]/g, '')}`}
+      aria-label={`Call ${name} on ${mobile}`}
+      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-success-600 px-3 py-1.5 text-[13px] font-medium text-white shadow-sm transition-colors hover:bg-success-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:ring-offset-2"
+    >
+      <Phone className="h-3.5 w-3.5" />
+      Call
+    </a>
+  )
+}
+
 const TODAY = istToday()
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -222,12 +243,15 @@ export function Calendar() {
             {status}
           </Badge>
         </div>
-        {showActions && f.status !== 'completed' && (
-          <div className="flex items-center gap-2 pt-1">
-            <Button size="sm" variant="soft" icon={<CheckCircle2 className="w-3.5 h-3.5" />} onClick={() => markComplete(f.id)}>
-              Complete
-            </Button>
-            {f.leadId && (
+        {(f.mobile || (showActions && f.status !== 'completed')) && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {showActions && f.status !== 'completed' && (
+              <Button size="sm" variant="soft" icon={<CheckCircle2 className="w-3.5 h-3.5" />} onClick={() => markComplete(f.id)}>
+                Complete
+              </Button>
+            )}
+            {f.mobile && <CallButton mobile={f.mobile} name={f.customerName} />}
+            {showActions && f.leadId && (
               <Button size="sm" variant="secondary" icon={<Eye className="w-3.5 h-3.5" />} onClick={() => navigate(`/leads/${f.leadId}`)}>
                 View Lead
               </Button>
@@ -494,11 +518,14 @@ export function Calendar() {
                         <p className="text-xs text-ink-400">Scheduled: {formatIndianDate(f.scheduledDate)}</p>
                       </div>
                     </div>
-                    {f.status !== 'completed' && (
-                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-ink-100">
-                        <Button size="sm" variant="soft" icon={<CheckCircle2 className="w-3.5 h-3.5" />} onClick={() => markComplete(f.id)}>
-                          Mark Complete
-                        </Button>
+                    {(f.mobile || f.status !== 'completed') && (
+                      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
+                        {f.status !== 'completed' && (
+                          <Button size="sm" variant="soft" icon={<CheckCircle2 className="w-3.5 h-3.5" />} onClick={() => markComplete(f.id)}>
+                            Mark Complete
+                          </Button>
+                        )}
+                        {f.mobile && <CallButton mobile={f.mobile} name={f.customerName} />}
                         {f.leadId && (
                           <Button size="sm" variant="secondary" icon={<Eye className="w-3.5 h-3.5" />} onClick={() => navigate(`/leads/${f.leadId}`)}>
                             View Lead

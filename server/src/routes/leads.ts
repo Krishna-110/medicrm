@@ -5,7 +5,7 @@ import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
-import { serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder, serializeRenewal } from '../lib/serialize.js';
+import { FOLLOW_UP_CONTACT, serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import type { ActivityCreateResponse, ConvertResponse } from '../lib/contract.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { convertLeadToOrder, previewConversion } from '../services/conversion.js';
@@ -400,6 +400,7 @@ leadsRouter.post(
           assignedCallerId: lead.assignedCallerId,
           createdBy: actor.userId,
         },
+        include: FOLLOW_UP_CONTACT,
       });
       // The other half of the same problem: the lead's NEXT FOLLOW-UP column stayed empty
       // while a follow-up sat scheduled against it.

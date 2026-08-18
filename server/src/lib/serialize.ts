@@ -206,9 +206,23 @@ export const serializeRenewal = (r: Renewal) => ({
   status: renewalStatus(r.renewalDate, r.expiryDate, r.renewedAt),
 });
 
+/**
+ * The relations serializeFollowUp reads a phone number from.
+ *
+ * Kept beside the serializer rather than written out at each of the four places follow-ups
+ * are returned: a site that forgot one would silently hand back a task with no number to
+ * ring, which looks like data missing rather than a query missing.
+ */
+export const FOLLOW_UP_CONTACT = {
+  lead: { select: { mobile: true } },
+  customer: { select: { primaryMobile: true } },
+} as const;
+
 type FollowUp = {
   id: string; leadId: string | null; renewalId: string | null; customerName: string;
   scheduledAt: Date; type: string; status: string; notes: string | null;
+  lead?: { mobile: string } | null;
+  customer?: { primaryMobile: string } | null;
 };
 export const serializeFollowUp = (f: FollowUp) => ({
   id: f.id,
@@ -216,6 +230,9 @@ export const serializeFollowUp = (f: FollowUp) => ({
   // Which renewal this reminder belongs to. Without it the client cannot tell that a renewal
   // already has a reminder, so the dialog could only ever offer the renewal date back.
   renewalId: f.renewalId ?? undefined,
+  // The number to ring. The lead's is preferred — that is the copy a caller has been editing
+  // — with the customer record standing in for a renewal reminder, which has no lead.
+  mobile: f.lead?.mobile ?? f.customer?.primaryMobile ?? undefined,
   customerName: f.customerName,
   scheduledDate: d10(f.scheduledAt),
   type: f.type as FollowUpType,

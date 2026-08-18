@@ -4,7 +4,7 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
-import { serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
+import { FOLLOW_UP_CONTACT, serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { assertStockCovers } from '../services/conversion.js';
 import { changeStock, resolveSellerLocation, stockAt } from '../services/inventory.js';
@@ -243,6 +243,7 @@ renewalsRouter.post(
       ? await prisma.followUp.update({
           where: { id: existing.id },
           data: { scheduledAt: when, notes },
+          include: FOLLOW_UP_CONTACT,
         })
       : await prisma.followUp.create({
           data: {
@@ -257,6 +258,7 @@ renewalsRouter.post(
             assignedCallerId: renewal.assignedCallerId,
             createdBy: actor.userId,
           },
+          include: FOLLOW_UP_CONTACT,
         });
 
     res.status(existing ? 200 : 201).json(serializeFollowUp(followUp));

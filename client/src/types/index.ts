@@ -145,6 +145,8 @@ export type FollowUp = {
   /** Set when this is a renewal reminder; lets the renewal find its own pending one. */
   renewalId?: string;
   customerName: string;
+  /** The number to ring — the lead's, or the customer record's for a renewal reminder. */
+  mobile?: string;
   scheduledDate: string;
   type: 'call' | 'reminder' | 'callback';
   status: 'pending' | 'completed' | 'missed';

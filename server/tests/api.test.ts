@@ -892,6 +892,31 @@ describe('a write reports what it caused', () => {
   });
 });
 
+describe('a follow-up carries the number to ring', () => {
+  it('from the lead, and from the customer for a renewal reminder', async () => {
+    await setStock('Atorva', 999);
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: caller.userId,
+      mobile: '9000000456',
+    }));
+
+    // A lead's own follow-up takes the lead's number.
+    const created = await as(admin).post(`/api/leads/${lead.id}/follow-ups`, { scheduledDate: '2026-12-02' });
+    expect(created.body.mobile).toBe('9000000456');
+    // And it survives the round trip through the list, which is what the Calendar reads.
+    const listed = (await as(admin).get('/api/follow-ups')).body.find((f: { id: string }) => f.id === created.body.id);
+    expect(listed.mobile).toBe('9000000456');
+
+    // A renewal reminder has no lead, so it falls back to the customer record.
+    const before = new Set((await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    const [renewal] = (await as(admin).get('/api/renewals')).body.filter((r: { id: string }) => !before.has(r.id));
+    const reminder = await as(admin).post(`/api/renewals/${renewal.id}/remind`, { scheduledDate: '2026-12-09' });
+    expect(reminder.body.leadId).toBeUndefined();
+    expect(reminder.body.mobile).toBe('9000000456');
+  });
+});
+
 describe('renewal reminders', () => {
   it('moves the existing reminder to the new date and says which renewal it is for', async () => {
     await setStock('Atorva', 999);

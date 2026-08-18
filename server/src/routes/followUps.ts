@@ -3,7 +3,7 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
-import { serializeFollowUp, serializeLead } from '../lib/serialize.js';
+import { FOLLOW_UP_CONTACT, serializeFollowUp, serializeLead } from '../lib/serialize.js';
 import { WITH_CHILDREN } from './leads.js';
 import type { FollowUpUpdateResponse } from '../lib/contract.js';
 import { syncNextFollowUp } from '../services/leads.js';
@@ -16,6 +16,7 @@ followUpsRouter.get(
     const followUps = await scopedFor(actorOf(req)).followUp.findMany({
       where: { deletedAt: null },
       orderBy: { scheduledAt: 'asc' },
+      include: FOLLOW_UP_CONTACT,
     });
     res.json(followUps.map(serializeFollowUp));
   }),
@@ -51,7 +52,7 @@ followUpsRouter.patch(
     if (Object.keys(data).length === 0) throw ApiError.badRequest('no updatable fields provided');
 
     const { followUp, lead } = await prisma.$transaction(async (tx) => {
-      const updated = await tx.followUp.update({ where: { id }, data });
+      const updated = await tx.followUp.update({ where: { id }, data, include: FOLLOW_UP_CONTACT });
       // Completing a follow-up advances the lead's last-contacted marker, which is what the
       // list view sorts and filters on.
       if (body.status === 'completed' && updated.leadId) {
