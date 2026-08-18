@@ -64,12 +64,13 @@ export type FollowUpType = 'call' | 'reminder' | 'callback';
 export type FollowUpStatus = 'pending' | 'completed' | 'missed';
 
 /**
- * The part of the day a customer asked to be called in.
+ * The two-hour window a customer asked to be called in, across the 10–6 calling day.
  *
- * Buckets rather than a clock time: nobody agrees to be rung at 14:05, they agree to an
- * afternoon. A stored time would have implied a precision the conversation never had.
+ * Buckets rather than a clock time: nobody agrees to be rung at 14:05, they agree to a
+ * window. Named on the 24-hour clock so they sort in the order they happen — '9-11' would
+ * fall after '16-18' as text, which a list of the day's calls would show as out of order.
  */
-export const FOLLOW_UP_SLOTS = ['morning', 'afternoon', 'evening'] as const;
+export const FOLLOW_UP_SLOTS = ['10-12', '12-14', '14-16', '16-18'] as const;
 export type FollowUpSlot = (typeof FOLLOW_UP_SLOTS)[number];
 
 /** The slot as sent by a client, or null. Anything unrecognised is refused rather than kept. */

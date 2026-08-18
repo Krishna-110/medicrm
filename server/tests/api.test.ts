@@ -917,14 +917,14 @@ describe('follow-up time slot', () => {
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
 
     // Setting the date and a slot together, which is how the form sends it.
-    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: 'evening' });
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: '16-18' });
     const first = (await as(admin).get('/api/follow-ups')).body.find((f: { leadId?: string }) => f.leadId === lead.id);
-    expect(first.slot).toBe('evening');
+    expect(first.slot).toBe('16-18');
 
     // Changing it moves the same follow-up rather than leaving the old slot behind.
-    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: 'morning' });
+    await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: '10-12' });
     const moved = (await as(admin).get('/api/follow-ups')).body.find((f: { id: string }) => f.id === first.id);
-    expect(moved.slot).toBe('morning');
+    expect(moved.slot).toBe('10-12');
 
     // "Any time" is a real answer, not a missing one.
     await as(admin).patch(`/api/leads/${lead.id}`, { nextFollowUp: '2026-11-03', followUpSlot: '' });
@@ -939,7 +939,7 @@ describe('follow-up time slot', () => {
       followUpSlot: 'midnight',
     });
     expect(res.status).toBe(400);
-    expect(String(res.body.error)).toMatch(/morning, afternoon, evening/i);
+    expect(String(res.body.error)).toMatch(/10-12, 12-14, 14-16, 16-18/);
   });
 
   it('a renewal reminder carries one too', async () => {
@@ -951,9 +951,9 @@ describe('follow-up time slot', () => {
 
     const res = await as(admin).post(`/api/renewals/${renewal.id}/remind`, {
       scheduledDate: '2026-11-10',
-      slot: 'afternoon',
+      slot: '14-16',
     });
-    expect(res.body.slot).toBe('afternoon');
+    expect(res.body.slot).toBe('14-16');
   });
 });
 
