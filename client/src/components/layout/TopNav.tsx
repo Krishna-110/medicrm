@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext'
 import { logout } from '@/context/AppContext'
 import { notificationsApi } from '@/api/notifications'
 import { authApi } from '@/api/auth'
+import { usersApi } from '@/api/users'
 import { emitToast } from '@/lib/toast'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -43,6 +44,9 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
 
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [profileForm, setProfileForm] = useState({ name: '', phone: '', email: '' })
+  const [savingProfile, setSavingProfile] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
   const [changingPassword, setChangingPassword] = useState(false)
@@ -64,6 +68,35 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  function openProfile() {
+    setShowProfileMenu(false)
+    setProfileForm({
+      name: currentUser?.name ?? '',
+      phone: currentUser?.phone ?? '',
+      email: currentUser?.email ?? '',
+    })
+    setShowProfile(true)
+  }
+
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault()
+    if (!currentUser) return
+    setSavingProfile(true)
+    try {
+      const updated = await usersApi.update(currentUser.id, profileForm)
+      // Both, because the signed-in user is held separately from the users list; updating one
+      // would leave the header showing the old name until the next sign-in.
+      dispatch({ type: 'UPDATE_USER', payload: { id: updated.id, updates: updated } })
+      dispatch({ type: 'LOGIN', payload: { user: updated } })
+      emitToast('Profile updated', 'success')
+      setShowProfile(false)
+    } catch (err) {
+      emitToast(err instanceof Error ? err.message : 'Failed to update profile')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
 
   async function handleLogout() {
     await logout(dispatch)
@@ -216,7 +249,10 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
                 <p className="truncate text-xs text-ink-500">{currentUser?.email}</p>
               </div>
               <div className="p-1.5">
-                <button className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-50">
+                <button
+                  onClick={openProfile}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-50"
+                >
                   <User className="h-4 w-4 text-ink-400" />
                   Profile
                 </button>
@@ -241,6 +277,76 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
           )}
         </div>
       </div>
+
+      {/*
+        * The signed-in user's own record. Name, phone and email are theirs to change — the
+        * server allows exactly those on your own account. Employee ID, role and location are
+        * shown but not editable: a caller changing their own role or the location they sell
+        * from is refused server-side, so offering the field would only produce a 403.
+        */}
+      <Modal
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+        title="Profile"
+        description="Your account details."
+        size="sm"
+      >
+        <form onSubmit={handleSaveProfile} className="space-y-4">
+          <div>
+            <label className="field-label" htmlFor="topnav-profile-name">Full Name</label>
+            <input
+              id="topnav-profile-name"
+              type="text"
+              required
+              value={profileForm.name}
+              onChange={(e) => setProfileForm((f) => ({ ...f, name: e.target.value }))}
+              className="field-input"
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="topnav-profile-phone">Phone</label>
+            <input
+              id="topnav-profile-phone"
+              type="tel"
+              required
+              value={profileForm.phone}
+              onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}
+              className="field-input"
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="topnav-profile-email">Email</label>
+            <input
+              id="topnav-profile-email"
+              type="email"
+              required
+              value={profileForm.email}
+              onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
+              className="field-input"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 rounded-xl bg-ink-50 px-3.5 py-3 text-sm">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-ink-400">Employee ID</p>
+              <p className="font-medium text-ink-800">{currentUser?.employeeId || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-ink-400">Role</p>
+              <p className="font-medium capitalize text-ink-800">{currentUser?.role}</p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-[11px] uppercase tracking-wide text-ink-400">Location</p>
+              <p className="font-medium text-ink-800">{currentUser?.locationName || 'Not assigned'}</p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-ink-100 pt-4">
+            <Button type="button" variant="secondary" onClick={() => setShowProfile(false)}>Cancel</Button>
+            <Button type="submit" loading={savingProfile}>Save Changes</Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         isOpen={showChangePassword}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Package,
   Eye,
+  ArrowLeft,
   ArrowRight,
   Check,
 } from 'lucide-react'
@@ -65,6 +66,13 @@ function getNextStage(current: OrderStage): OrderStage | null {
   const idx = STAGE_ORDER.indexOf(current)
   if (idx < 0 || idx >= STAGE_ORDER.length - 1) return null
   return STAGE_ORDER[idx + 1]
+}
+
+/** The stage before this one, for undoing an advance clicked by mistake. */
+function getPreviousStage(current: OrderStage): OrderStage | null {
+  const idx = STAGE_ORDER.indexOf(current)
+  if (idx <= 0) return null
+  return STAGE_ORDER[idx - 1]
 }
 
 export function Orders() {
@@ -143,15 +151,15 @@ export function Orders() {
     { id: 'payments', label: 'Payments', count: payments.length },
   ]
 
-  async function handleAdvanceStage(order: Order) {
-    const next = getNextStage(order.stage)
-    if (!next) return
+  /** Moves an order one step along the pipeline, either way. */
+  async function handleMoveStage(order: Order, to: OrderStage | null) {
+    if (!to) return
     try {
-      const updated = await ordersApi.update(order.id, { stage: next })
+      const updated = await ordersApi.update(order.id, { stage: to })
       dispatch({ type: 'UPDATE_ORDER', payload: { id: updated.id, updates: updated } })
       if (selectedOrder?.id === order.id) setSelectedOrder(updated)
     } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to advance order stage')
+      emitToast(err instanceof Error ? err.message : 'Failed to change order stage')
     }
   }
 
@@ -415,11 +423,25 @@ export function Orders() {
                           >
                             <Eye className="h-4 w-4" />
                           </button>
+                          {/* Stages are clicked through by hand, so one clicked too far needs
+                              a way back — otherwise a packed order marked shipped is stuck. */}
+                          {getPreviousStage(order.stage) && (
+                            <button
+                              type="button"
+                              title="Back to previous stage"
+                              aria-label={`Move ${order.orderNumber} back a stage`}
+                              onClick={() => handleMoveStage(order, getPreviousStage(order.stage))}
+                              className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
+                            >
+                              <ArrowLeft className="h-4 w-4" />
+                            </button>
+                          )}
                           {nextStage && (
                             <button
                               type="button"
                               title="Advance to next stage"
-                              onClick={() => handleAdvanceStage(order)}
+                              aria-label={`Advance ${order.orderNumber} a stage`}
+                              onClick={() => handleMoveStage(order, nextStage)}
                               className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
                             >
                               <ArrowRight className="h-4 w-4" />
@@ -693,11 +715,22 @@ export function Orders() {
                 </select>
               </div>
               <div className="flex-1" />
+              {/* Both directions, so an advance clicked one step too far is undone here rather
+                  than leaving the order sitting in a stage it never reached. */}
+              {getPreviousStage(selectedOrder.stage) && (
+                <Button
+                  variant="secondary"
+                  icon={<ArrowLeft className="h-4 w-4" />}
+                  onClick={() => handleMoveStage(selectedOrder, getPreviousStage(selectedOrder.stage))}
+                >
+                  Back to {STAGES.find((s) => s.key === getPreviousStage(selectedOrder.stage))?.label}
+                </Button>
+              )}
               {getNextStage(selectedOrder.stage) && (
                 <Button
                   variant="primary"
                   icon={<ArrowRight className="h-4 w-4" />}
-                  onClick={() => handleAdvanceStage(selectedOrder)}
+                  onClick={() => handleMoveStage(selectedOrder, getNextStage(selectedOrder.stage))}
                 >
                   Advance to {STAGES.find((s) => s.key === getNextStage(selectedOrder.stage))?.label}
                 </Button>
