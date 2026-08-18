@@ -45,6 +45,16 @@ const DEFAULT_SUPPLY_DAYS = 30;
  */
 const RENEWAL_GRACE_DAYS = 7;
 
+/**
+ * When an order needs renewing: the day its shortest line runs out.
+ *
+ * The order is renewed as a whole, so it falls due as soon as any part of it does. Taking the
+ * longest instead would leave the customer without the 15-day medicine for the 75 days the
+ * 90-day one keeps running.
+ */
+export const soonestRenewal = (lines: { days: number }[]): number =>
+  Math.min(...lines.map((l) => l.days));
+
 export type QuoteLine = {
   productId: string | null;
   name: string;
@@ -319,28 +329,33 @@ export async function convertLeadToOrder(
       if (line.productId) {
         await changeStock(tx, line.productId, sellerLocationId, -line.quantity);
       }
-
-      // One renewal per medicine, due when that medicine runs out.
-      //
-      // Nothing in the application created these before — only the seed did — so the whole
-      // renewals feature had no input and sat empty on a real database. Conversion is where
-      // the facts are: the customer, the medicine, and how many days of it were sold.
-      await tx.renewal.create({
-        data: {
-          customerId,
-          customerName: customer.fullName,
-          orderId: order.id,
-          productId: line.productId,
-          medicineName: line.name,
-          orderDate: order.createdAt,
-          renewalDate: addDays(order.createdAt, line.days),
-          expiryDate: addDays(order.createdAt, line.days + RENEWAL_GRACE_DAYS),
-          // Follows the lead's owner, so it lands with whoever has the relationship.
-          assignedCallerId: lead.assignedCallerId,
-          createdBy: actor.userId,
-        },
-      });
     }
+
+    // One renewal per ORDER, not per medicine.
+    //
+    // A renewal is a call to make, and one order is one call: a customer who bought three
+    // medicines together gets rung once about the reorder, not three times on three days.
+    // Per-medicine renewals put the same person on the list once per line, and the caller
+    // had to work out for themselves that it was all the same conversation.
+    //
+    // Dated by the SHORTEST line, so nothing quietly runs out while the longest one is still
+    // in supply. A mixed order is named for everything in it and links to no single product;
+    // an order with one medicine keeps that link, which is what prices its reorder.
+    await tx.renewal.create({
+      data: {
+        customerId,
+        customerName: customer.fullName,
+        orderId: order.id,
+        productId: lines.length === 1 ? (lines[0]?.productId ?? null) : null,
+        medicineName: lines.map((l) => l.name).join(', '),
+        orderDate: order.createdAt,
+        renewalDate: addDays(order.createdAt, soonestRenewal(lines)),
+        expiryDate: addDays(order.createdAt, soonestRenewal(lines) + RENEWAL_GRACE_DAYS),
+        // Follows the lead's owner, so it lands with whoever has the relationship.
+        assignedCallerId: lead.assignedCallerId,
+        createdBy: actor.userId,
+      },
+    });
 
     const priced = await tx.order.update({
       where: { id: order.id },

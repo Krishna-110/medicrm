@@ -447,30 +447,51 @@ describe('follow-up scheduling stays in step with the lead', () => {
     expect(after.body.nextFollowUp).toBe('2026-10-05');
   });
 
-  it('converting creates one renewal per medicine, due when that medicine runs out', async () => {
-    // Nothing in the application created renewals — only the seed did — so the feature had no
-    // input at all and the page sat empty on any real database.
+  it('converting creates ONE renewal for the order, due when its shortest line runs out', async () => {
+    // One order is one call. Per-medicine renewals put the same customer on the list once per
+    // line, so a three-medicine sale looked like three people to ring on three days.
     // Identified by what is new rather than by name: every lead here shares one mobile, so
     // they all resolve to the same customer and customerName cannot tell them apart.
     const before = new Set(
       (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id),
     );
 
-    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
-      assignedCaller: caller.userId,
-      medicines: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
-    }));
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
     await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
       items: [{ name: 'Atorva', days: 30 }, { name: 'Sansamrit', days: 15 }],
     }));
 
     const mine = (await as(admin).get('/api/renewals')).body
       .filter((r: { id: string }) => !before.has(r.id));
-    expect(mine).toHaveLength(2);
+    expect(mine).toHaveLength(1);
+    // Named for everything in the order, so the caller knows what the conversation covers.
+    expect(mine[0].medicineName).toBe('Atorva, Sansamrit');
 
-    // The shorter course falls due first — the date comes from the medicine, not a constant.
-    const byName = Object.fromEntries(mine.map((r: { medicineName: string }) => [r.medicineName, r]));
-    expect(byName['Sansamrit'].renewalDate < byName['Atorva'].renewalDate).toBe(true);
+    // Dated by the SHORTEST line: 15 days, not 30, or the Sansamrit runs out unnoticed while
+    // the Atorva is still in supply.
+    const days = Math.round(
+      (new Date(mine[0].renewalDate).getTime() - new Date(mine[0].orderDate).getTime()) / 86_400_000,
+    );
+    expect(days).toBe(15);
+  });
+
+  it('falls due on the tenure sold, when the order is all one tenure', async () => {
+    // The ordinary case: everything on the order shares a tenure, so the renewal is simply
+    // that many days out — 60 days sold, 60 days until the call.
+    await setStock('Atorva', 999);
+    await setStock('Sansamrit', 999);
+    const before = new Set((await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id));
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload({
+      items: [{ name: 'Atorva', days: 60 }, { name: 'Sansamrit', days: 60 }],
+    }));
+
+    const [renewal] = (await as(admin).get('/api/renewals')).body
+      .filter((r: { id: string }) => !before.has(r.id));
+    const days = Math.round(
+      (new Date(renewal.renewalDate).getTime() - new Date(renewal.orderDate).getTime()) / 86_400_000,
+    );
+    expect(days).toBe(60);
   });
 
   it('renewing opens the next cycle rather than ending the relationship', async () => {
@@ -850,7 +871,7 @@ describe('pincode', () => {
 });
 
 describe('a write reports what it caused', () => {
-  it('converting returns the renewals it opened, one per medicine', async () => {
+  it('converting returns the renewal it opened for the order', async () => {
     await setStock('Atorva', 999);
     await setStock('Sansamrit', 999);
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({
@@ -864,9 +885,8 @@ describe('a write reports what it caused', () => {
     expect(res.status).toBe(200);
     // Without these the client is told an order exists but never that the sale opened any
     // renewals, so the Renewals page ignores the sale until the data is fetched again.
-    expect(res.body.renewals).toHaveLength(2);
-    expect(res.body.renewals.map((r: { medicineName: string }) => r.medicineName).sort())
-      .toEqual(['Atorva', 'Sansamrit']);
+    expect(res.body.renewals).toHaveLength(1);
+    expect(res.body.renewals[0].medicineName).toBe('Atorva, Sansamrit');
     // They are the real rows, not echoes of the request.
     const listed = (await as(admin).get('/api/renewals')).body.map((r: { id: string }) => r.id);
     for (const r of res.body.renewals) expect(listed).toContain(r.id);

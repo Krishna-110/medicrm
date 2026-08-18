@@ -6,7 +6,7 @@ import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { FOLLOW_UP_CONTACT, serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
-import { assertStockCovers } from '../services/conversion.js';
+import { assertStockCovers, soonestRenewal } from '../services/conversion.js';
 import { changeStock, resolveSellerLocation, stockAt } from '../services/inventory.js';
 import { lineTotal, nextOrderNumber, payableAmount } from '../services/orders.js';
 import { auditCreate } from '../services/audit.js';
@@ -164,15 +164,13 @@ renewalsRouter.post(
       }
       await auditCreate(tx, actorOf(req), 'orders', created);
 
-      // When the next cycle falls due comes from the days entered against this renewal's own
-      // medicine in the reorder — the field the user just set. If they left it blank, the
-      // previous cycle's length carries over, so a 15-day course stays 15. The grace window is
-      // always inherited; it is not something the reorder exposes.
-      const ownLine = priced.find(
-        (l) => l.name.toLowerCase() === renewed.medicineName.toLowerCase(),
-      );
+      // The next cycle describes the reorder just placed, not the one before it: add a
+      // medicine here and the next call is about both. It falls due when the shortest line
+      // runs out — one order, one call, dated so nothing lapses unnoticed. An empty days
+      // field carries the previous cycle's length over, so a 15-day course stays 15. The
+      // grace window is always inherited; the reorder does not expose it.
       const prevSupply = Math.max(istDayDiff(renewed.renewalDate, renewed.orderDate), 1);
-      const supplyDays = ownLine?.days || prevSupply;
+      const supplyDays = priced.length ? soonestRenewal(priced) : prevSupply;
       const graceDays = Math.max(istDayDiff(renewed.expiryDate, renewed.renewalDate), 1);
       const from = renewed.renewedAt!;
 
@@ -183,8 +181,9 @@ renewalsRouter.post(
           // Points at the order just placed, not the original — that is what the next cycle
           // is a renewal of.
           orderId: created.id,
-          productId: renewed.productId,
-          medicineName: renewed.medicineName,
+          // Only a single-medicine reorder has one product to point at.
+          productId: priced.length === 1 ? (priced[0]?.product?.id ?? null) : null,
+          medicineName: priced.map((l) => l.name).join(', '),
           orderDate: from,
           renewalDate: addDays(from, supplyDays),
           expiryDate: addDays(from, supplyDays + graceDays),
