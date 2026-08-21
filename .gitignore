@@ -9,6 +9,9 @@ dist-ssr/
 .env
 .env.*
 !.env.example
+# The API's public URL, baked into the shipped bundle — not a secret, and the build is
+# wrong without it, so it belongs in the repo.
+!client/.env.production
 
 # Browser tests and CI are kept out of this repository by request. The files still exist
 # locally — `npm run test:e2e` works on a machine that has them — they are simply not tracked.

@@ -1,6 +1,19 @@
 const TOKEN_KEY = 'medcrm_token';
 const FLASH_KEY = 'medcrm_flash';
 
+/**
+ * Where the API lives.
+ *
+ * Unset — as in development — this is '/api', same-origin, which Vite proxies to the local
+ * server. In production the API answers on its own domain, so VITE_API_URL names it and the
+ * value is baked into the bundle at build time. Set it to the host alone
+ * (https://api.example.com); the '/api' prefix is added here so the variable does not have to
+ * carry a path, and a trailing slash is tolerated rather than producing '//api'.
+ */
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/+$/, '')}/api`
+  : '/api';
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -38,7 +51,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   let res: Response;
   try {
-    res = await fetch(`/api${path}`, { ...options, headers });
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   } catch {
     throw new ApiError(0, 'Unable to reach the server. Check your connection and try again.');
   }

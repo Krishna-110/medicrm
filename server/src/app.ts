@@ -20,6 +20,36 @@ import { locationsRouter } from './routes/locations.js';
  */
 export const app = express();
 
+/**
+ * Cross-origin access for the frontend, which is served from its own domain.
+ *
+ * Authentication is a Bearer token in the Authorization header, not a cookie, so credentials
+ * mode is not in play and a wildcard origin is safe: every route past login still demands a
+ * valid token, and a browser on a hostile page has none. CORS_ORIGIN pins it to specific
+ * origins when set — comma-separated, honoured by reflecting whichever one asked.
+ *
+ * The preflight is answered here rather than falling through to the 404 handler, which would
+ * have refused OPTIONS and taken every PATCH and DELETE with it.
+ */
+const corsAllow = (process.env.CORS_ORIGIN ?? '*').split(',').map((o) => o.trim());
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allow = corsAllow.includes('*')
+    ? '*'
+    : origin && corsAllow.includes(origin)
+      ? origin
+      : corsAllow[0];
+  res.header('Access-Control-Allow-Origin', allow);
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
+
 app.use(express.json({ limit: '5mb' })); // payment screenshots arrive as data URLs
 
 app.get('/api/health', route(async (_req, res) => {
