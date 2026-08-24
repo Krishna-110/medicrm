@@ -5,12 +5,7 @@ import { login } from '@/context/AppContext'
 import { takeFlashMessage } from '@/api/client'
 import { emitToast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
-import { Shield, Phone, ArrowRight, Activity, CheckCircle2, AlertCircle } from 'lucide-react'
-
-const demoAccounts = [
-  { email: 'aarav.sharma@medicrm.in', password: 'admin123', role: 'Admin', icon: Shield, color: 'bg-warning-50 text-warning-600' },
-  { email: 'sneha.iyer@medicrm.in', password: 'caller123', role: 'Caller', icon: Phone, color: 'bg-primary-50 text-primary-600' },
-]
+import { ArrowRight, Activity, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export function Login() {
   const { dispatch } = useApp()
@@ -188,38 +183,6 @@ export function Login() {
               Sign in <ArrowRight className="h-4 w-4" />
             </Button>
           </form>
-
-          <div className="relative my-7">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-ink-200" /></div>
-            <div className="relative flex justify-center"><span className="bg-white px-3 text-xs font-medium uppercase tracking-wide text-ink-400 lg:bg-[#f5f7fb]">Or try a demo role</span></div>
-          </div>
-
-          <div className="space-y-2">
-            {demoAccounts.map((account) => (
-              <button
-                key={account.email}
-                onClick={() => handleLogin(account.email, account.password)}
-                disabled={!!loading}
-                className="group flex w-full items-center gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-left transition-all hover:border-primary-300 hover:shadow-sm disabled:opacity-60"
-              >
-                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${account.color}`}>
-                  <account.icon className="h-[18px] w-[18px]" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-semibold text-ink-900">{account.role}</div>
-                  <div className="text-xs text-ink-400">{account.email}</div>
-                </div>
-                {loading === account.email ? (
-                  <svg className="h-4 w-4 animate-spin text-primary-500" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <ArrowRight className="h-4 w-4 text-ink-300 transition-transform group-hover:translate-x-0.5 group-hover:text-primary-500" />
-                )}
-              </button>
-            ))}
-          </div>
 
           <p className="mt-8 text-center text-xs text-ink-400">Abhyasa Crm v1.0 — Medical Distribution CRM</p>
         </div>
