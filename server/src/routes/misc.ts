@@ -87,8 +87,16 @@ miscRouter.get(
     let callerPerformance: unknown[] = [];
     let salesByCaller: unknown[] = [];
     if (admin) {
+      // Deactivated accounts are left out. They cannot log in, so they can neither take a
+      // lead nor close one, and listing them puts a permanent 0 leads / 0% row in the ranking
+      // for someone who is not on the floor.
+      //
+      // This list feeds the sales chart below as well, so a caller deactivated after selling
+      // takes their history out of that chart with them. That is the deliberate trade: the
+      // chart answers "who is selling", not "what has ever been sold" — the Sales cards above
+      // it carry the totals, and those read from orders and are unaffected.
       const callers = await prisma.user.findMany({
-        where: { role: 'caller', deletedAt: null },
+        where: { role: 'caller', status: 'active', deletedAt: null },
         select: {
           id: true,
           name: true,

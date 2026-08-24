@@ -86,7 +86,14 @@ export async function login(req: Request, res: Response) {
     prisma.session.create({
       data: { userId: user.id, tokenHash: hashToken(token), expiresAt },
     }),
-    prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
+    // serializeUser reads location.name, so the relation has to come back with the row or
+    // the signed-in user is reported as having no location at all — which is what the
+    // profile dialog showed for everyone, assigned or not. The users list already includes it.
+    prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+      include: { location: true },
+    }),
   ]);
 
   const payload: LoginResponse = { token, user: serializeUser(updated) };
@@ -102,7 +109,10 @@ export async function logout(req: Request, res: Response) {
 
 export async function me(req: Request, res: Response) {
   const actor = actorOf(req);
-  const user = await prisma.user.findUnique({ where: { id: actor.userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: actor.userId },
+    include: { location: true },
+  });
   if (!user) throw ApiError.notFound('User not found');
   const payload: MeResponse = { user: serializeUser(user) };
   res.json(payload);

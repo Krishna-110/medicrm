@@ -119,10 +119,21 @@ export function Leads() {
    * Who this lead can be handed to. A caller may only ever hold their own — the server
    * refuses anything else with a 403 — so offering them the rest of the team was offering
    * choices that could only fail on save. Admins get everyone.
+   *
+   * Deactivated accounts are excluded: they cannot log in, so a lead handed to one is work
+   * nobody can reach, while the row still shows an owner and reads as handled.
+   *
+   * The exception is whoever already holds this lead. Dropping them would leave the select
+   * with a value matching no option, so the browser would show the first name in the list and
+   * saving would hand the lead to them — a silent reassignment on an unrelated edit. Keeping
+   * them means the only way to move the lead off a deactivated caller is to choose the
+   * replacement deliberately.
    */
   const isCaller = state.currentUser?.role === 'caller'
   const callers = state.users.filter(u =>
-    isCaller ? u.id === state.currentUser?.id : u.role === 'caller',
+    isCaller
+      ? u.id === state.currentUser?.id
+      : u.role === 'caller' && (u.status === 'active' || u.id === form.assignedCaller),
   )
 
   const tabCounts = useMemo(() => {

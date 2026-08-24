@@ -115,6 +115,20 @@ describe('authentication', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/password|hash/i);
   });
 
+  // The profile dialog reads locationName off the signed-in user. Both routes that report
+  // that user have to carry the relation, or it shows "Not assigned" for people who are.
+  it('login and /auth/me both name the location, not just its id', async () => {
+    const seat = await prisma.user.findUniqueOrThrow({
+      where: { id: caller.userId },
+      include: { location: true },
+    });
+    expect(seat.location?.name).toBeTruthy();
+
+    const fresh = await request(app).post('/api/auth/login').send(CALLER);
+    expect(fresh.body.user.locationName).toBe(seat.location!.name);
+    expect((await as(caller).get('/api/auth/me')).body.user.locationName).toBe(seat.location!.name);
+  });
+
   it('logout invalidates the token immediately', async () => {
     const s = await login(OTHER);
     expect((await as(s).post('/api/auth/logout')).status).toBe(204);
@@ -178,6 +192,20 @@ describe('dashboard', () => {
     const res = await as(admin).get('/api/dashboard');
     const sum = res.body.leadStatusBreakdown.reduce((n: number, r: { count: number }) => n + Number(r.count), 0);
     expect(sum).toBe(res.body.totalLeads);
+  });
+
+  // A deactivated caller cannot log in, so they can neither take a lead nor close one.
+  // Ranking them leaves a permanent 0 leads / 0% row for someone who is not on the floor.
+  it('leaves deactivated callers out of the performance and sales lists', async () => {
+    const gone = await prisma.user.findUniqueOrThrow({ where: { email: INACTIVE.email } });
+    expect(gone.status).toBe('inactive');
+
+    const res = await as(admin).get('/api/dashboard');
+    const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
+    expect(ids(res.body.callerPerformance)).not.toContain(gone.id);
+    expect(ids(res.body.salesByCaller as { id: string }[])).not.toContain(gone.id);
+    // Active colleagues are still there, so this filters rather than empties.
+    expect(ids(res.body.callerPerformance)).toContain(caller.userId);
   });
 
   it('still sums immediately after a write, with no refresh', async () => {
