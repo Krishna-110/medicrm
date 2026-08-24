@@ -139,12 +139,14 @@ export function LeadDetailPage() {
 
   async function handleStatusChange(status: LeadStatus) {
     if (!lead || status === lead.status) return
-    if (status === 'sold') {
-      if (!lead.address?.trim() || !lead.pincode?.trim() || !lead.paymentScreenshot?.trim()) {
-        emitToast('Address, Pincode, and Payment Screenshot are required when Lead Status is Sold. Redirecting to edit...', 'info')
-        navigate('/leads', { state: { editLeadId: lead.id } })
-        return
-      }
+    // Sold needs somewhere to send the goods and nothing else — the same rule the server
+    // enforces and the leads table already used. This copy had kept demanding a pincode and a
+    // payment screenshot after both stopped being required, so the only way to mark a lead
+    // sold from here was to satisfy conditions no longer asked of anyone.
+    if (status === 'sold' && !lead.address?.trim()) {
+      emitToast('Address is required when Lead Status is Sold. Redirecting to edit...', 'info')
+      navigate('/leads', { state: { editLeadId: lead.id } })
+      return
     }
     try {
       const updated = await leadsApi.update(lead.id, { status })

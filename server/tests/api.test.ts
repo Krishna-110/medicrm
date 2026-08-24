@@ -1023,16 +1023,24 @@ describe('conversion is dated', () => {
     expect(after.convertedDate).toBe(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   });
 
-  it('stamps a lead marked sold by hand, and clears it if the status is taken back', async () => {
+  it('does NOT stamp a lead marked sold by hand — that raises no order', async () => {
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
     const sold = await as(admin).patch(`/api/leads/${lead.id}`, {
       status: 'sold',
       address: '1 Test Street',
       pincode: '400001',
-      paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
     });
     expect(sold.status).toBe(200);
-    expect(sold.body.convertedDate).not.toBe('');
+    // 'sold' is a label a caller picks; no order exists, no stock moved, no money is evidenced.
+    // Dating it made Total Customers outrun Total Orders with no way to reconcile them.
+    expect(sold.body.convertedDate).toBe('');
+  });
+
+  it('clears the date when a converted lead is taken back out of that status', async () => {
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
+    const converted = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    expect(converted.status).toBe(200);
+    expect(converted.body.lead.convertedDate).not.toBe('');
 
     // Set in error and taken back: the date must not linger, or the lead would keep counting
     // as a customer that never was.

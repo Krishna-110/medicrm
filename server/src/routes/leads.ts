@@ -228,13 +228,15 @@ leadsRouter.patch(
     if (typeof data.mobile === 'string') data.mobile = normalizeIndianMobile(data.mobile);
     if ('assignedCaller' in body) data.assignedCallerId = body.assignedCaller ?? null;
 
-    // Becoming a customer by hand is stamped the same way the conversion flow stamps it.
-    // Only on the transition in, so re-saving a lead that already sold does not move the
-    // date; and cleared on the way back out, so a status set in error leaves nothing behind.
-    const SOLD_STATUSES = new Set(['converted', 'sold']);
+    // convertedAt marks the moment a lead became a paying customer, so only 'converted' earns
+    // it — and that status is written solely by the conversion transaction, which raises the
+    // order in the same breath. 'sold' was stamped here too, from when it still demanded
+    // payment proof; it no longer does, so it is a pipeline label with no sale behind it and
+    // nothing to date. Only on the transition in, so re-saving does not move the date, and
+    // cleared on the way back out, so a status set in error leaves nothing behind.
     if ('status' in body && targetStatus !== before.status) {
-      if (SOLD_STATUSES.has(targetStatus)) data.convertedAt = new Date();
-      else if (SOLD_STATUSES.has(before.status)) data.convertedAt = null;
+      if (targetStatus === 'converted') data.convertedAt = new Date();
+      else if (before.status === 'converted') data.convertedAt = null;
     }
 
     const lead = await prisma.$transaction(async (tx) => {

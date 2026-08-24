@@ -7,9 +7,12 @@
 
 ## Verdict
 
-The frontend is healthy. **The API server is not** — it is running code roughly **12 commits
-behind** the deployed frontend, and every feature built in those commits either fails outright
-or silently does nothing.
+The frontend is healthy. **The API server is not** — it is a partial copy of the code, with
+some modules current and others stale, so they disagree with each other.
+
+**Of the 13 findings, 5 are our code, 5 are deployment/server, 2 are production data, and 1 is
+a decision for you.** The two blocking failures are entirely deployment: the same operations
+pass 169/169 tests locally against a real database.
 
 Reads work everywhere. Simple writes work. **Two core workflows are completely broken:**
 scheduling a follow-up, and converting a lead into an order. Both return HTTP 500, and because
@@ -26,6 +29,58 @@ of an IIS setting the user sees no error message at all — the button just does
 **Dashboard specifically:** all 9 server-computed metrics are correct and update live. The two
 client-computed cards — **Customers Converted** and **Total Customers** — are both wrong, and
 wrong quietly: the numbers look plausible. See the Dashboard audit below.
+
+---
+
+## Whose problem is each one?
+
+Determined by checking the local source and running the suite — **169/169 tests pass against a
+real Postgres with all migrations applied**, including `converts to an order, deducting stock
+and closing the lead`, `setting the date on a lead schedules a real follow-up`, and `stamps
+convertedDate when a lead converts`. Nothing below is inferred from behaviour alone.
+
+### Our code — fix in the repo (5)
+
+| # | Issue | Proof in source |
+|---|---|---|
+| 5 | Profile shows "Not assigned" | `auth.ts:89` and `:105` query the user **without** `include: { location: true }`; `users.ts:22` has it. Serializer then drops `locationName`. |
+| 6 | Inactive users assignable | `Leads.tsx:124` filters `u.role === 'caller'` and never checks `status`. |
+| 7 | Missing status filter tabs | `statusFilterTabs` (`Leads.tsx:36-43`) lists 6 of the 10 statuses — no `call_back_later`, `no_response`, `not_interested`, `sold`. |
+| 10 | Demo login buttons | `demoAccounts` hardcoded at `Login.tsx:10-11` with plaintext passwords, rendered at `:198`. |
+| 11 | CORS defaults to `*` | `app.ts:34` — my code. Works, but should be pinned via `CORS_ORIGIN`. |
+
+None of these are deployment-related. They are wrong on `master` right now.
+
+### Server / deployment — nothing to change in the repo (5)
+
+| # | Issue | Why it is not our code |
+|---|---|---|
+| 1 | Convert → 500 | The conversion tests pass locally against a real DB. Code is correct. |
+| 2 | Follow-up writes → 500 | Same — four follow-up scheduling tests pass locally. |
+| 3 | Mixed build | `server/src/lib/` stale, `server/src/routes/` current. A deployment artefact; the repo is internally consistent. |
+| 4 | Errors masked as "Unable to reach the server" | Pure IIS config — `httpErrors existingResponse`. Nothing in the app can affect it. |
+| 12 | `convertedDate` empty | Our code stamps it, and the test proves it. Production's NULLs mean the migration backfill never ran — `db push` instead of `migrate deploy`. |
+
+### Production data — one-time cleanup, code is fine (2)
+
+| # | Issue | Why the code is not at fault |
+|---|---|---|
+| 8 | Stock headline wrong | `changeStock` and `setStock` both call `refreshTotal` (`inventory.ts:28`), and every route writes through them (`medicines.ts:138-139`). Tests confirm 5 → 12 → 3. The production rows were written **bypassing the service** — the cached total equals Main Store exactly, so the other four locations were filled without it. Needs a one-time recount; the code keeps it right afterwards. |
+| 9 | Wrong states, junk rows | Data entry. `Delhi/Karnataka`, `fjgfghhh`, users named `jj` and `Mr.` |
+
+### A decision for you, not a bug (1)
+
+**#13 — should a hand-marked "Sold" lead count as a customer?** `Dashboard.tsx:148` counts
+status `converted` **or** `sold`. `converted` only ever happens through Convert to Order, but
+`sold` can be set by hand in the Edit Lead dropdown — so it can exist with no order, which is
+exactly Rajesh Patel. The codebase knows this: the `lead_converted_at` migration comment says
+*"A lead marked sold by hand raised no order."*
+
+So it is behaving as written. But it means **Total Customers (6) and Total Orders (5) can never
+reconcile.** Tell me which you want and I will change it:
+
+- count only leads with a real order — Total Customers becomes 5, or
+- keep counting hand-marked sales — leave as is.
 
 ---
 

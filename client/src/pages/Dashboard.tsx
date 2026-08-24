@@ -129,9 +129,15 @@ export function Dashboard() {
   }, [state.booting, state.leads, state.orders, state.followUps, state.renewals, dispatch])
 
   /*
-   * A customer is a lead that actually bought. Two statuses mean that: 'converted' is set by
-   * the convert-to-order flow, 'sold' is the manual equivalent (it demands a payment
-   * screenshot).
+   * A customer is a lead that actually bought — which means 'converted', and only that.
+   *
+   * 'sold' looks like the same thing and is not. It is a label a caller picks from the status
+   * dropdown; it raises no order, moves no stock and opens no renewal, and since payment proof
+   * stopped being required for it there is nothing to say money ever changed hands. Counting
+   * it made Total Customers exceed Total Orders with no way to reconcile the two, and put
+   * people in the customer list who had never bought anything. 'converted' is written in one
+   * place only — the conversion transaction that also writes the order — so it cannot be set
+   * without a sale behind it.
    *
    * One person, one row: a repeat buyer has a converted lead per purchase, so the rows are
    * deduplicated by mobile — normalised on write, which is what makes it usable as an
@@ -145,7 +151,7 @@ export function Dashboard() {
   const customers = useMemo(() => {
     const byPerson = new Map<string, Lead>()
     for (const lead of state.leads) {
-      if (lead.status !== 'converted' && lead.status !== 'sold') continue
+      if (lead.status !== 'converted') continue
       // Falling back to the id keeps a blank mobile from collapsing every such lead into one.
       const identity = lead.mobile?.trim() || lead.id
       if (!byPerson.has(identity)) byPerson.set(identity, lead)
@@ -175,7 +181,7 @@ export function Dashboard() {
     const inMonth = new Set<string>()
 
     for (const lead of state.leads) {
-      if (lead.status !== 'converted' && lead.status !== 'sold') continue
+      if (lead.status !== 'converted') continue
       const on = lead.convertedDate || lead.createdDate
       if (!on) continue
       const identity = lead.mobile?.trim() || lead.id
