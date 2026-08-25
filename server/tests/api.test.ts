@@ -1008,6 +1008,25 @@ describe('a follow-up carries the number to ring', () => {
     expect(reminder.body.leadId).toBeUndefined();
     expect(reminder.body.mobile).toBe('9000000456');
   });
+
+  // The calendar dials straight from a renewal, so the renewal itself has to carry the
+  // number — not only the reminder follow-up someone may never have scheduled.
+  it('the renewal itself carries it too, on every route that returns one', async () => {
+    await setStock('Atorva', 999);
+    const { body: lead } = await as(admin).post('/api/leads', leadPayload({
+      assignedCaller: caller.userId,
+      mobile: '9000000789',
+    }));
+
+    // Straight off the conversion that opened it.
+    const converted = await as(admin).post(`/api/leads/${lead.id}/convert`, convertPayload());
+    expect(converted.body.renewals[0].mobile).toBe('9000000789');
+
+    // And through the list, which is what the Calendar actually reads.
+    const listed = (await as(admin).get('/api/renewals')).body
+      .find((r: { id: string }) => r.id === converted.body.renewals[0].id);
+    expect(listed.mobile).toBe('9000000789');
+  });
 });
 
 describe('renewal reminders', () => {

@@ -6,7 +6,7 @@ import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
 import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
 import { parseFollowUpSlot } from '../lib/vocab.js';
-import { FOLLOW_UP_CONTACT, serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder, serializeRenewal } from '../lib/serialize.js';
+import { FOLLOW_UP_CONTACT, RENEWAL_CONTACT, serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import type { ActivityCreateResponse, ConvertResponse } from '../lib/contract.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { convertLeadToOrder, previewConversion } from '../services/conversion.js';
@@ -379,6 +379,7 @@ leadsRouter.post(
     const renewals = await prisma.renewal.findMany({
       where: { orderId: order.id, deletedAt: null },
       orderBy: { renewalDate: 'asc' },
+      include: RENEWAL_CONTACT,
     });
     const payload: ConvertResponse = {
       order: serializeOrder(order),

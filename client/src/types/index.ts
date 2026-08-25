@@ -128,6 +128,8 @@ export type Renewal = {
   id: string;
   customerId: string;
   customerName: string;
+  /** The number to ring when the reminder comes due; absent if the customer record has none. */
+  mobile?: string;
   medicineName: string;
   orderDate: string;
   renewalDate: string;

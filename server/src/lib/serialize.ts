@@ -183,7 +183,19 @@ type Renewal = {
   orderDate: Date; renewalDate: Date; expiryDate: Date;
   assignedCallerId: string | null; renewedAt: Date | null;
   orderId: string | null; previousRenewalId: string | null;
+  customer?: { primaryMobile: string } | null;
 };
+
+/**
+ * The relation serializeRenewal reads a phone number from.
+ *
+ * Same reasoning as FOLLOW_UP_CONTACT: named once and spread at every site that serializes a
+ * renewal, because a site that forgot it would hand back a reminder with nobody to ring and
+ * the calendar would quietly drop the Call button rather than fail.
+ */
+export const RENEWAL_CONTACT = {
+  customer: { select: { primaryMobile: true } },
+} as const;
 /**
  * `daysRemaining` and `status` are derived, not stored — see lib/dates.ts. Storing them
  * would need a nightly job and would be wrong for a day whenever that job failed.
@@ -192,6 +204,9 @@ export const serializeRenewal = (r: Renewal) => ({
   id: r.id,
   customerId: r.customerId,
   customerName: r.customerName,
+  // The number to ring when the reminder comes due, so the calendar can dial straight from
+  // the renewal the way it already does from a follow-up.
+  mobile: r.customer?.primaryMobile ?? undefined,
   medicineName: r.medicineName,
   orderDate: d10(r.orderDate),
   renewalDate: d10(r.renewalDate),

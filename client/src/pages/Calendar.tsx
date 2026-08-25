@@ -363,6 +363,7 @@ export function Calendar() {
           <Badge variant={BADGE_VARIANT[state_]}>{state_}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2 pt-1">
+          {r.mobile && <CallButton mobile={r.mobile} name={r.customerName} />}
           <Button size="sm" variant="secondary" icon={<RotateCcw className="w-3.5 h-3.5" />} onClick={() => navigate('/renewals')}>
             Open renewal
           </Button>
@@ -541,7 +542,10 @@ export function Calendar() {
                           <Badge variant="info">renewal</Badge>
                         </div>
                       </div>
-                      <Button size="sm" variant="secondary" icon={<RotateCcw className="w-3.5 h-3.5" />} onClick={() => navigate('/renewals')} />
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {r.mobile && <CallButton mobile={r.mobile} name={r.customerName} />}
+                        <Button size="sm" variant="secondary" icon={<RotateCcw className="w-3.5 h-3.5" />} onClick={() => navigate('/renewals')} />
+                      </div>
                     </div>
                   ))}
                   {todayFollowUps.map(f => (

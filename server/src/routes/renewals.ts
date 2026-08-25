@@ -4,7 +4,7 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
-import { FOLLOW_UP_CONTACT, serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
+import { FOLLOW_UP_CONTACT, RENEWAL_CONTACT, serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { assertStockCovers, soonestRenewal } from '../services/conversion.js';
 import { changeStock, resolveSellerLocation, stockAt } from '../services/inventory.js';
@@ -21,6 +21,7 @@ renewalsRouter.get(
     const renewals = await scopedFor(actorOf(req)).renewal.findMany({
       where: { deletedAt: null },
       orderBy: { expiryDate: 'asc' },
+      include: RENEWAL_CONTACT,
     });
     // status and daysRemaining are derived at serialization time — see lib/dates.ts.
     res.json(renewals.map(serializeRenewal));
@@ -89,6 +90,7 @@ renewalsRouter.post(
       const renewed = await tx.renewal.update({
         where: { id },
         data: { renewedAt: new Date() },
+        include: RENEWAL_CONTACT,
       });
 
       const customer = await tx.customer.findUniqueOrThrow({ where: { id: renewed.customerId } });
@@ -192,6 +194,7 @@ renewalsRouter.post(
           previousRenewalId: renewed.id,
           createdBy: actorOf(req).userId,
         },
+        include: RENEWAL_CONTACT,
       });
       // Re-read with its lines. serializeOrder builds `medicines` from them, so returning the
       // bare created row would have handed the client an order with nothing in it — and the
