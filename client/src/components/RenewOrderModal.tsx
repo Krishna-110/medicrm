@@ -103,8 +103,7 @@ export function RenewOrderModal({
 
   const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const canSubmit =
-    rows.length > 0 && !rowsInvalid && short.length === 0 && !discountInvalid &&
-    (paymentMode === 'offline' || !!screenshot) && !submitting
+    rows.length > 0 && !rowsInvalid && short.length === 0 && !discountInvalid && !submitting
 
   const setRow = (id: string, patch: Partial<Row>) =>
     setRows(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r)))
@@ -293,7 +292,7 @@ export function RenewOrderModal({
           <span className="field-label">Payment mode</span>
           <div className="grid grid-cols-2 gap-2">
             {([
-              { value: 'online', label: 'Online', hint: 'Transfer — needs proof' },
+              { value: 'online', label: 'Online', hint: 'Bank transfer or UPI' },
               { value: 'offline', label: 'Offline', hint: 'Cash or card in person' },
             ] as const).map(opt => (
               <button
@@ -317,7 +316,7 @@ export function RenewOrderModal({
         {paymentMode === 'online' && (
         <div>
           <label className="field-label" htmlFor="renew-screenshot">
-            Payment Screenshot <span className="text-danger-500">*</span>
+            Payment Screenshot <span className="text-ink-400">(optional)</span>
           </label>
           <input
             id="renew-screenshot"
@@ -338,7 +337,7 @@ export function RenewOrderModal({
           />
           {!screenshot && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-400">
-              <Upload size={12} /> Required — the order is recorded as paid.
+              <Upload size={12} /> Attach one if you have it — the order records as paid either way.
             </p>
           )}
         </div>

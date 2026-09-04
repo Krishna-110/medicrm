@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  assertCanChangeLeadLifecycle,
   assertCanEditUser,
   assertFollowUpAssignable,
   assertLeadAssignable,
@@ -136,11 +135,6 @@ describe('write guards', () => {
     }
     // An ordinary self-edit is untouched.
     expect(() => assertNoPrivilegeEscalation(CALLER, { name: 'New Name', phone: '9' })).not.toThrow();
-  });
-
-  it('a caller may not soft-delete or restore leads', () => {
-    expect(() => assertCanChangeLeadLifecycle(ADMIN)).not.toThrow();
-    expect(() => assertCanChangeLeadLifecycle(CALLER)).toThrowError(forbidden);
   });
 
   it('a caller may act only on their own notifications', () => {

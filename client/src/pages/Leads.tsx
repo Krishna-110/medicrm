@@ -270,11 +270,6 @@ export function Leads() {
   async function saveLead(): Promise<Lead | null> {
     // Medicines and payment proof are no longer captured here — both belong to the sale, and
     // the sale is composed in the conversion dialog. A lead records who the customer is.
-    if (editingLead && form.status === 'sold' && !form.address.trim()) {
-      emitToast('Customer Address is required when Lead Status is Sold')
-      return null
-    }
-
     const payload = {
       customerName: form.customerName,
       mobile: form.mobile,
@@ -486,7 +481,6 @@ export function Leads() {
               <input
                 id="leads-customer-name"
                 type="text"
-                required
                 value={form.customerName}
                 onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))}
                 className="field-input"
@@ -497,7 +491,6 @@ export function Leads() {
               <input
                 id="leads-mobile-number"
                 type="tel"
-                required
                 value={form.mobile}
                 onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))}
                 className="field-input"
@@ -521,7 +514,6 @@ export function Leads() {
               <input
                 id="leads-address"
                 type="text"
-                required
                 value={form.address}
                 onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
                 className="field-input"
@@ -535,7 +527,6 @@ export function Leads() {
               <input
                 id="leads-city"
                 type="text"
-                required
                 value={form.city}
                 onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
                 className="field-input"
@@ -546,7 +537,6 @@ export function Leads() {
               <input
                 id="leads-state"
                 type="text"
-                required
                 value={form.state}
                 onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
                 className="field-input"
@@ -573,7 +563,6 @@ export function Leads() {
             <input
               id="leads-disease"
               type="text"
-              required={!editingLead}
               value={form.disease}
               onChange={e => setForm(f => ({ ...f, disease: e.target.value }))}
               className="field-input"
@@ -581,16 +570,6 @@ export function Leads() {
             />
           </div>
 
-          <div>
-            <label className="field-label" htmlFor="leads-doctor-name-optional">Doctor Name (optional)</label>
-            <input
-              id="leads-doctor-name-optional"
-              type="text"
-              value={form.doctorName}
-              onChange={e => setForm(f => ({ ...f, doctorName: e.target.value }))}
-              className="field-input"
-            />
-          </div>
 
           <div>
             <label className="field-label" htmlFor="leads-notes-optional">Notes (optional)</label>
@@ -621,24 +600,26 @@ export function Leads() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="field-label" htmlFor="leads-assigned-caller">Assigned Caller</label>
-              <select
-                id="leads-assigned-caller"
-                value={form.assignedCaller}
-                onChange={e => setForm(f => ({ ...f, assignedCaller: e.target.value }))}
-                className="field-input"
-              >
-                {/* Unassigned is an admin's choice. A caller leaving it here would be
-                    refused on save, since their leads must stay with them. */}
-                {!isCaller && <option value="">Unassigned</option>}
-                {callers.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Assigning is an admin's decision. A caller's own lead is force-assigned to them
+                by the server, so showing them a picker offered a choice they never had. */}
+            {!isCaller && (
+              <div>
+                <label className="field-label" htmlFor="leads-assigned-caller">Assigned Caller</label>
+                <select
+                  id="leads-assigned-caller"
+                  value={form.assignedCaller}
+                  onChange={e => setForm(f => ({ ...f, assignedCaller: e.target.value }))}
+                  className="field-input"
+                >
+                  <option value="">Unassigned</option>
+                  {callers.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {editingLead && (

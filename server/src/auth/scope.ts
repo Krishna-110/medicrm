@@ -131,12 +131,6 @@ export function assertNoPrivilegeEscalation(actor: Actor, patch: Record<string, 
   }
 }
 
-/** Callers may not soft-delete or restore leads, even their own. */
-export function assertCanChangeLeadLifecycle(actor: Actor): void {
-  if (isAdmin(actor)) return;
-  throw ApiError.forbidden('Callers may not soft-delete or restore leads');
-}
-
 export function assertOwnsNotification(actor: Actor, recipientUserId: string): void {
   if (isAdmin(actor)) return;
   if (recipientUserId !== actor.userId) {

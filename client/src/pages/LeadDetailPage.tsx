@@ -139,15 +139,9 @@ export function LeadDetailPage() {
 
   async function handleStatusChange(status: LeadStatus) {
     if (!lead || status === lead.status) return
-    // Sold needs somewhere to send the goods and nothing else — the same rule the server
-    // enforces and the leads table already used. This copy had kept demanding a pincode and a
-    // payment screenshot after both stopped being required, so the only way to mark a lead
-    // sold from here was to satisfy conditions no longer asked of anyone.
-    if (status === 'sold' && !lead.address?.trim()) {
-      emitToast('Address is required when Lead Status is Sold. Redirecting to edit...', 'info')
-      navigate('/leads', { state: { editLeadId: lead.id } })
-      return
-    }
+    // Sold asks for nothing. The address is filled in when it is known, which is often after
+    // the customer has agreed to buy — holding the status hostage to it meant a caller could
+    // not record a sale that had already happened.
     try {
       const updated = await leadsApi.update(lead.id, { status })
       dispatch({ type: 'UPDATE_LEAD', payload: { id: updated.id, updates: updated } })

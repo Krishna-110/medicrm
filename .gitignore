@@ -41,3 +41,26 @@ coverage/
 .eslintcache
 *.bak
 *.orig
+
+# Local runtime artifacts: a dev server's log and pid file, and the cookie jars used when
+# poking the API by hand. Produced by running the app, never part of it.
+*.log
+*.pid
+cookies*.txt
+
+# Stray local databases. The real one is Postgres, named in server/.env — these are empty
+# SQLite files that assorted tools dropped into the working tree.
+*.db
+*.sqlite
+*.sqlite3
+
+# QA write-ups and the one-off scripts used to verify a fix. Kept locally, out of the repo
+# by request.
+QA-*.md
+server/*.mjs
+
+# Scratch files whose Windows temp path collapsed into a filename ("C:Users...json") and
+# landed in the repo root. Test payloads and API dumps — safe to delete, never committed.
+CUsersar186AppDataLocalTempclaudeD--work-medicrm5e42d4a1-c268-450f-ae00-4220ec28ef2cscratchpadtest_payload.json
+CUsersar186AppDataLocalTempleads.json
+CUsersar186AppDataLocalTemptest_auth.ps1

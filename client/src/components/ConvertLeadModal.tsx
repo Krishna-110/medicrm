@@ -122,7 +122,7 @@ export function ConvertLeadModal({
   const short = noLocation ? [] : chosen.filter(p => p.medicine && !p.covered)
   const canSubmit =
     !!preview && !noLocation && chosen.length > 0 && unknown.length === 0 &&
-    (paymentMode === 'offline' || !!screenshot) && !discountInvalid && short.length === 0 && !submitting
+    !discountInvalid && short.length === 0 && !submitting
 
   async function handleConfirm() {
     if (!lead || !canSubmit) return
@@ -301,7 +301,7 @@ export function ConvertLeadModal({
           <span className="field-label">Payment mode</span>
           <div className="grid grid-cols-2 gap-2">
             {([
-              { value: 'online', label: 'Online', hint: 'Transfer — needs proof' },
+              { value: 'online', label: 'Online', hint: 'Bank transfer or UPI' },
               { value: 'offline', label: 'Offline', hint: 'Cash or card in person' },
             ] as const).map(opt => (
               <button
@@ -325,7 +325,7 @@ export function ConvertLeadModal({
         {paymentMode === 'online' && (
         <div>
           <label className="field-label" htmlFor={`${id}-screenshot`}>
-            Payment Screenshot <span className="text-danger-500">*</span>
+            Payment Screenshot <span className="text-ink-400">(optional)</span>
           </label>
           {screenshot ? (
             <div className="flex items-center gap-3 rounded-xl border border-ink-100 p-2">
@@ -361,7 +361,7 @@ export function ConvertLeadModal({
           )}
           {!screenshot && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-400">
-              <Upload size={12} /> Required — the order is recorded as paid.
+              <Upload size={12} /> Attach one if you have it — the order records as paid either way.
             </p>
           )}
         </div>

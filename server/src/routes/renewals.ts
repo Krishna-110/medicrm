@@ -68,13 +68,9 @@ renewalsRouter.post(
       const days = rawDays || defaultDays;
       return { name, quantity: days, days };
     });
-    // Same rule as a first sale: only a transfer leaves a screenshot behind, so only a
-    // transfer can be asked for one. A reorder paid in cash has no image to produce.
+    // Same rule as a first sale: the screenshot is recorded when given and never required.
     const paymentMode = req.body?.paymentMode === 'offline' ? 'offline' : 'online';
     const screenshot = String(req.body?.paymentScreenshot ?? '').trim();
-    if (paymentMode === 'online' && !screenshot) {
-      throw ApiError.badRequest('A payment screenshot is required for an online payment');
-    }
     const discountType: 'none' | 'flat' | 'percentage' = req.body?.discountType ?? 'none';
     const discountValue = new Prisma.Decimal(req.body?.discountValue ?? 0);
     if (discountValue.lessThan(0)) throw ApiError.badRequest('Discount cannot be negative');

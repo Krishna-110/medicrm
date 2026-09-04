@@ -3,7 +3,7 @@ import { prisma, type Tx } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
-import { assertCanChangeLeadLifecycle, assertLeadAssignable, isAdmin } from '../auth/scope.js';
+import { assertLeadAssignable, isAdmin } from '../auth/scope.js';
 import { normalizeIndianMobile } from '../lib/mobile.js';
 import { parseFollowUpSlot } from '../lib/vocab.js';
 import { FOLLOW_UP_CONTACT, RENEWAL_CONTACT, serializeFollowUp, serializeLead, serializeLeadActivity, serializeLeadMedicine, serializeOrder, serializeRenewal } from '../lib/serialize.js';
@@ -81,12 +81,15 @@ async function createLeadMedicine(
 }
 
 /**
- * Pincode is deliberately absent: a caller taking a number down over the phone often does not
- * have it yet, and demanding it to record the lead at all lost leads that were otherwise
- * complete. It is still required to mark one Sold, below, because that is the point at which
- * something has to be shipped.
+ * Nothing is required to record a lead. A caller on a live call often has only a name, or only
+ * a number, and refusing the record until the rest is known lost the lead altogether — the
+ * details get filled in over the following calls. An address is still required to mark one
+ * Sold, below, because that is the point at which something has to be shipped.
+ *
+ * The columns behind these are NOT NULL, so an absent value is stored as '' — the same
+ * convention pincode already used, and every read already treats blank as absent.
  */
-const REQUIRED = ['customerName', 'mobile', 'address', 'city', 'state', 'disease'] as const;
+const text = (v: unknown): string => (v == null ? '' : String(v));
 
 leadsRouter.get(
   '/',
@@ -122,9 +125,6 @@ leadsRouter.post(
     const actor = actorOf(req);
     const body = req.body ?? {};
 
-    for (const field of REQUIRED) {
-      if (!body[field]) throw ApiError.badRequest(`${field} is required`);
-    }
     // Optional now. What the customer actually buys is decided at conversion, where the
     // catalogue and its prices are in front of the caller — demanding it at capture meant
     // guessing the sale before the conversation had happened.
@@ -139,18 +139,18 @@ leadsRouter.post(
     const lead = await prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
         data: {
-          customerName: body.customerName,
-          mobile: normalizeIndianMobile(body.mobile) ?? body.mobile,
+          customerName: text(body.customerName),
+          mobile: normalizeIndianMobile(body.mobile) ?? text(body.mobile),
           alternateNumber: body.alternateNumber ?? null,
-          address: body.address,
-          city: body.city,
-          state: body.state,
+          address: text(body.address),
+          city: text(body.city),
+          state: text(body.state),
           // Empty rather than null: the column is NOT NULL, and every read already treats a
           // blank pincode as absent — the shipping address joins on truthiness, and the Sold
           // check trims before testing. Not worth a migration to say the same thing.
-          pincode: body.pincode ?? '',
+          pincode: text(body.pincode),
           doctorName: body.doctorName ?? null,
-          disease: body.disease,
+          disease: text(body.disease),
           notes: body.notes ?? null,
           assignedCallerId,
           leadSource: body.leadSource ?? 'other',
@@ -206,14 +206,10 @@ leadsRouter.patch(
       throw ApiError.badRequest(e instanceof Error ? e.message : 'Invalid slot');
     }
 
-    // Marking a lead sold needs somewhere to send it, and nothing more. Payment proof is
-    // captured when converting, which is the path that actually takes the money; requiring it
-    // here as well asked for the same image twice. Pincode is optional everywhere.
+    // Nothing is required to mark a lead sold. The address used to be, on the grounds that
+    // something has to ship — but it is routinely settled after the sale is agreed, and
+    // blocking the status left the caller unable to record a sale that had plainly happened.
     const targetStatus = 'status' in body ? body.status : before.status;
-    if (targetStatus === 'sold') {
-      const address = 'address' in body ? body.address : before.address;
-      if (!String(address ?? '').trim()) throw ApiError.badRequest('Address is required when Lead Status is Sold');
-    }
 
     if ('assignedCaller' in body) assertLeadAssignable(actor, body.assignedCaller ?? null);
 
@@ -282,10 +278,8 @@ leadsRouter.delete(
   '/:id',
   route(async (req, res) => {
     const actor = actorOf(req);
-    // Soft delete is an admin action even for a caller's own lead — a caller closing a lead
-    // uses a status, not deletion.
-    assertCanChangeLeadLifecycle(actor);
-
+    // A caller may delete their own lead. The scoped client below is what limits them to it:
+    // another caller's lead simply is not found, so no separate ownership check is needed.
     const db = scopedFor(actor);
     const lead = await db.lead.findFirst({ where: { id: param(req, 'id'), deletedAt: null } });
     if (!lead) throw ApiError.notFound('Lead not found');

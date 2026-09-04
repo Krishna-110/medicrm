@@ -214,14 +214,10 @@ export async function convertLeadToOrder(
   input: ConversionInput,
   fallbackUnitPrice: Prisma.Decimal | number = 0,
 ) {
-  // Proof of payment is a precondition, not a detail to be filled in later — but only for a
-  // transfer, which leaves a screenshot behind. Cash over the counter has none to show, and
-  // demanding one there meant inventing an image to record a sale that plainly happened.
+  // The screenshot is kept when it is offered and never demanded: a sale that plainly happened
+  // should not be blocked for want of an image, whichever way it was paid.
   const paymentMode = input.paymentMode === 'offline' ? 'offline' : 'online';
   const screenshot = String(input.paymentScreenshot ?? '').trim();
-  if (paymentMode === 'online' && !screenshot) {
-    throw ApiError.badRequest('A payment screenshot is required for an online payment');
-  }
   const discountType = input.discountType ?? 'none';
   const discountValue = new Prisma.Decimal(input.discountValue ?? 0);
   if (discountValue.lessThan(0)) {
