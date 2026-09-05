@@ -656,6 +656,26 @@ export function Orders() {
                 <Button variant="secondary" loading={savingDiscount} onClick={handleApplyDiscount}>
                   Apply Discount
                 </Button>
+                {/*
+                 * Payment sits here rather than in the footer beside the stage buttons. It
+                 * decides whether the order counts towards Sales, which makes it a fact about
+                 * the money — the same kind of thing as the discount next to it — and not a
+                 * navigation control.
+                 */}
+                <div className="ml-auto">
+                  <label className="field-label" htmlFor="order-payment-status">Payment</label>
+                  <select
+                    id="order-payment-status"
+                    value={selectedOrder.paymentStatus}
+                    onChange={(e) => handlePaymentChange(selectedOrder, e.target.value as PaymentStatus)}
+                    className="field-input w-auto"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="partial">Partial</option>
+                    <option value="paid">Paid</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -698,22 +718,8 @@ export function Orders() {
               )}
             </div>
 
-            {/* Payment + Advance */}
+            {/* Stage navigation */}
             <div className="flex flex-col items-start gap-4 border-t border-ink-200 pt-4 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-ink-600" htmlFor="order-payment-status">Payment:</label>
-                <select
-                  id="order-payment-status"
-                  value={selectedOrder.paymentStatus}
-                  onChange={(e) => handlePaymentChange(selectedOrder, e.target.value as PaymentStatus)}
-                  className="field-input w-auto"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="partial">Partial</option>
-                  <option value="paid">Paid</option>
-                  <option value="refunded">Refunded</option>
-                </select>
-              </div>
               <div className="flex-1" />
               {/* Both directions, so an advance clicked one step too far is undone here rather
                   than leaving the order sitting in a stage it never reached. */}
