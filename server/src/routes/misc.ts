@@ -48,8 +48,23 @@ miscRouter.get(
     const { today, tomorrow, weekStart, monthStart } = periodBoundaries();
     const live = { deletedAt: null };
 
+    /*
+     * Sales is money taken, so only a paid order counts. It used to sum every order in the
+     * period regardless of payment, which meant an order sitting on Pending — or one moved
+     * back to Pending after the fact — still reported as revenue, and marking it unpaid
+     * changed nothing on the dashboard.
+     *
+     * 'partial' is deliberately excluded with the rest: only the order total is stored, never
+     * how much of it has actually arrived, so counting a partial payment would book the whole
+     * amount. 'refunded' is money returned and counts for even less.
+     */
+    const PAID = { paymentStatus: 'paid' } as const;
+
     const sumOrders = async (where: object) =>
-      Number((await db.order.aggregate({ _sum: { totalAmount: true }, where }))._sum.totalAmount ?? 0);
+      Number(
+        (await db.order.aggregate({ _sum: { totalAmount: true }, where: { ...where, ...PAID } }))
+          ._sum.totalAmount ?? 0,
+      );
 
     const [
       totalLeads, callsDoneToday, pendingFollowUps, totalOrders, renewalsDue,
@@ -125,9 +140,11 @@ miscRouter.get(
       });
 
       // Orders have no caller column, so sales attribute through the lead each came from.
+      // Paid only, on the same reasoning as the period figures above — otherwise a caller's
+      // bar counted orders nobody had paid for.
       const sales = await prisma.order.groupBy({
         by: ['leadId'],
-        where: { deletedAt: null, leadId: { not: null } },
+        where: { deletedAt: null, leadId: { not: null }, ...PAID },
         _sum: { totalAmount: true },
       });
       const leadOwners = new Map(
