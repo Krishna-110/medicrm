@@ -288,7 +288,12 @@ export async function convertLeadToOrder(
         customerName: customer.fullName,
         shippingAddress: [lead.address, lead.city, lead.state, lead.pincode].filter(Boolean).join(', '),
         stage: 'confirmed',
-        paymentStatus: 'paid',
+        // Paid only where there is something to show for it. The screenshot was compulsory
+        // once, so every order could safely be booked as paid; now that it is optional, a
+        // cash sale and an online one recorded without proof would both have claimed payment
+        // nobody had evidenced. Pending is the honest starting point — an admin marks it paid
+        // from the order once the money is confirmed.
+        paymentStatus: screenshot ? 'paid' : 'pending',
         discountType,
         discountValue,
         createdBy: actor.userId,

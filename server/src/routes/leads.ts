@@ -83,8 +83,7 @@ async function createLeadMedicine(
 /**
  * Nothing is required to record a lead. A caller on a live call often has only a name, or only
  * a number, and refusing the record until the rest is known lost the lead altogether — the
- * details get filled in over the following calls. An address is still required to mark one
- * Sold, below, because that is the point at which something has to be shipped.
+ * details get filled in over the following calls.
  *
  * The columns behind these are NOT NULL, so an absent value is stored as '' — the same
  * convention pincode already used, and every read already treats blank as absent.
@@ -146,8 +145,7 @@ leadsRouter.post(
           city: text(body.city),
           state: text(body.state),
           // Empty rather than null: the column is NOT NULL, and every read already treats a
-          // blank pincode as absent — the shipping address joins on truthiness, and the Sold
-          // check trims before testing. Not worth a migration to say the same thing.
+          // blank pincode as absent. Not worth a migration to say the same thing.
           pincode: text(body.pincode),
           doctorName: body.doctorName ?? null,
           disease: text(body.disease),
@@ -226,10 +224,8 @@ leadsRouter.patch(
 
     // convertedAt marks the moment a lead became a paying customer, so only 'converted' earns
     // it — and that status is written solely by the conversion transaction, which raises the
-    // order in the same breath. 'sold' was stamped here too, from when it still demanded
-    // payment proof; it no longer does, so it is a pipeline label with no sale behind it and
-    // nothing to date. Only on the transition in, so re-saving does not move the date, and
-    // cleared on the way back out, so a status set in error leaves nothing behind.
+    // order in the same breath. Only on the transition in, so re-saving does not move the
+    // date, and cleared on the way back out, so a status set in error leaves nothing behind.
     if ('status' in body && targetStatus !== before.status) {
       if (targetStatus === 'converted') data.convertedAt = new Date();
       else if (before.status === 'converted') data.convertedAt = null;

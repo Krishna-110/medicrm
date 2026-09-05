@@ -52,7 +52,6 @@ const editableStatusOptions: { value: LeadStatus; label: string }[] = [
   { value: 'call_back_later', label: 'Call Back Later' },
   { value: 'no_response', label: 'No Response' },
   { value: 'not_interested', label: 'Not Interested' },
-  { value: 'sold', label: 'Sold' },
 ]
 
 const leadSourceOptions: { value: LeadSource; label: string }[] = [
@@ -546,7 +545,7 @@ export function Leads() {
               {/* Optional at capture — a caller taking a number down rarely has it yet. It
                   becomes required only when the lead is marked Sold, since nothing ships
                   without one. */}
-              <label className="field-label" htmlFor="leads-pincode">Pincode <span className="font-normal text-ink-400">(optional)</span></label>
+              <label className="field-label" htmlFor="leads-pincode">Pincode</label>
               <input
                 id="leads-pincode"
                 type="text"
@@ -572,7 +571,7 @@ export function Leads() {
 
 
           <div>
-            <label className="field-label" htmlFor="leads-notes-optional">Notes (optional)</label>
+            <label className="field-label" htmlFor="leads-notes-optional">Notes</label>
             <textarea
               id="leads-notes-optional"
               rows={2}
@@ -670,7 +669,13 @@ export function Leads() {
             </>
           )}
 
-          <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-ink-200">
+          {/*
+           * Stuck to the bottom of the modal's scroll area. On a phone the form is roughly
+           * 1150px of stacked fields in an 800px viewport — taller still with the keyboard up —
+           * so these buttons sat several hundred pixels below the fold and the form read as
+           * having no way to submit it.
+           */}
+          <div className="sticky bottom-0 -mx-6 -mb-5 mt-2 flex flex-wrap justify-end gap-3 border-t border-ink-200 bg-white px-6 py-4">
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
               Cancel
             </Button>

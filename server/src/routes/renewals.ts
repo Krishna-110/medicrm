@@ -133,7 +133,9 @@ renewalsRouter.post(
             .filter(Boolean)
             .join(', '),
           stage: 'confirmed',
-          paymentStatus: 'paid',
+          // Same rule as a first sale: paid only where a screenshot evidences it, pending
+          // otherwise. A cash reorder has no proof to give and should not claim payment.
+          paymentStatus: screenshot ? 'paid' : 'pending',
           paymentMode,
           paymentScreenshot: screenshot || null,
           discountType,

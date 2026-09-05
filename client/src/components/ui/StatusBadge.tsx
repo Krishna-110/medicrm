@@ -12,7 +12,6 @@ const leadStatusConfig: Record<LeadStatus, { label: string; variant: Variant }> 
   no_response: { label: 'No Response', variant: 'default' },
   not_interested: { label: 'Not Interested', variant: 'danger' },
   converted: { label: 'Converted', variant: 'success' },
-  sold: { label: 'Sold', variant: 'success' },
 }
 
 const orderStageConfig: Record<OrderStage, { label: string; variant: Variant }> = {
@@ -32,7 +31,14 @@ const renewalStatusConfig: Record<RenewalStatus, { label: string; variant: Varia
 }
 
 export function LeadStatusBadge({ status }: { status: LeadStatus }) {
-  const config = leadStatusConfig[status]
+  // A status the app no longer offers can still be sitting in the database — 'sold' was
+  // retired while rows carried it. The API passes the column through as a plain cast, so an
+  // unmapped value reached here and read .variant off undefined, taking down the whole list
+  // rather than the one badge. Render it plainly instead.
+  const config = leadStatusConfig[status] ?? {
+    label: String(status).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    variant: 'default' as Variant,
+  }
   return <Badge variant={config.variant} dot>{config.label}</Badge>
 }
 

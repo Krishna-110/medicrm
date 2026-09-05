@@ -868,34 +868,20 @@ describe('payment mode', () => {
 });
 
 describe('pincode', () => {
-  it('is optional everywhere — a lead records and sells without one', async () => {
+  it('is optional everywhere — a lead records and progresses without one', async () => {
     // Taken down over the phone, a pincode often is not known yet. Refusing the lead for it
-    // lost leads that were otherwise complete, and refusing the sale for it blocked a sale
-    // that had already happened.
+    // lost leads that were otherwise complete.
     const payload = leadPayload({ assignedCaller: caller.userId });
     delete (payload as Record<string, unknown>).pincode;
     const created = await as(admin).post('/api/leads', payload);
     expect(created.status).toBe(201);
     expect(created.body.pincode ?? '').toBe('');
 
-    const sold = await as(admin).patch(`/api/leads/${created.body.id}`, {
-      status: 'sold',
-      paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
-    });
-    expect(sold.status).toBe(200);
-    expect(sold.body.status).toBe('sold');
+    const moved = await as(admin).patch(`/api/leads/${created.body.id}`, { status: 'interested' });
+    expect(moved.status).toBe(200);
+    expect(moved.body.status).toBe('interested');
   });
 
-  it('still refuses a sale with no address, which pincode does not stand in for', async () => {
-    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
-    const res = await as(admin).patch(`/api/leads/${lead.id}`, {
-      status: 'sold',
-      address: '',
-      paymentScreenshot: 'data:image/png;base64,iVBORw0KGgo=',
-    });
-    expect(res.status).toBe(400);
-    expect(String(res.body.error)).toMatch(/address/i);
-  });
 });
 
 describe('a write reports what it caused', () => {
@@ -1070,18 +1056,6 @@ describe('conversion is dated', () => {
     expect(after.convertedDate).toBe(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   });
 
-  it('does NOT stamp a lead marked sold by hand — that raises no order', async () => {
-    const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));
-    const sold = await as(admin).patch(`/api/leads/${lead.id}`, {
-      status: 'sold',
-      address: '1 Test Street',
-      pincode: '400001',
-    });
-    expect(sold.status).toBe(200);
-    // 'sold' is a label a caller picks; no order exists, no stock moved, no money is evidenced.
-    // Dating it made Total Customers outrun Total Orders with no way to reconcile them.
-    expect(sold.body.convertedDate).toBe('');
-  });
 
   it('clears the date when a converted lead is taken back out of that status', async () => {
     const { body: lead } = await as(admin).post('/api/leads', leadPayload({ assignedCaller: caller.userId }));

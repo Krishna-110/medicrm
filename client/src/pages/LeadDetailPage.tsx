@@ -55,7 +55,6 @@ const editableStatusOptions: { value: LeadStatus; label: string }[] = [
   { value: 'call_back_later', label: 'Call Back Later' },
   { value: 'no_response', label: 'No Response' },
   { value: 'not_interested', label: 'Not Interested' },
-  { value: 'sold', label: 'Sold' },
 ]
 
 const sourceLabel: Record<string, string> = {
@@ -139,9 +138,7 @@ export function LeadDetailPage() {
 
   async function handleStatusChange(status: LeadStatus) {
     if (!lead || status === lead.status) return
-    // Sold asks for nothing. The address is filled in when it is known, which is often after
-    // the customer has agreed to buy — holding the status hostage to it meant a caller could
-    // not record a sale that had already happened.
+    // No status asks for anything: the details are filled in as the calls go on.
     try {
       const updated = await leadsApi.update(lead.id, { status })
       dispatch({ type: 'UPDATE_LEAD', payload: { id: updated.id, updates: updated } })

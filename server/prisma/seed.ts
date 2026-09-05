@@ -31,7 +31,7 @@ const LOOKUPS = {
     ['new', 'New'], ['contacted', 'Contacted'], ['follow_up_pending', 'Follow-up Pending'],
     ['interested', 'Interested'], ['call_back_later', 'Call Back Later'],
     ['no_response', 'No Response'], ['not_interested', 'Not Interested'],
-    ['converted', 'Converted'], ['sold', 'Sold'],
+    ['converted', 'Converted'],
   ],
   leadSource: [
     ['website', 'Website'], ['referral', 'Referral'], ['walk_in', 'Walk-in'], ['phone', 'Phone'],
@@ -193,7 +193,7 @@ async function main() {
     const leads: [name: string, mobile: string, city: string, disease: string, status: string, caller: string, createdDaysAgo: number][] = [
       ['Ramesh Gupta', '9876543210', 'Mumbai', 'Diabetes Type 2', 'contacted', sneha, 12],
       ['Deepa Nambiar', '9876123450', 'Kochi', 'Hypertension', 'call_back_later', sneha, 9],
-      ['Rajesh Patel', '9898765432', 'Ahmedabad', 'Thyroid', 'sold', sneha, 6],
+      ['Rajesh Patel', '9898765432', 'Ahmedabad', 'Thyroid', 'interested', sneha, 6],
       ['Sunita Verma', '9823456789', 'Pune', 'Diabetes Type 1', 'not_interested', vikram, 20],
       ['Suresh Rao', '9765432109', 'Bengaluru', 'Cholesterol', 'new', vikram, 3],
       ['Anil Kumar', '9812345670', 'Delhi', 'Asthma', 'interested', ananya, 8],

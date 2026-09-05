@@ -93,7 +93,6 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   no_response: 'No Response',
   not_interested: 'Not Interested',
   converted: 'Converted',
-  sold: 'Sold',
 }
 
 export function Dashboard() {
@@ -131,13 +130,10 @@ export function Dashboard() {
   /*
    * A customer is a lead that actually bought — which means 'converted', and only that.
    *
-   * 'sold' looks like the same thing and is not. It is a label a caller picks from the status
-   * dropdown; it raises no order, moves no stock and opens no renewal, and since payment proof
-   * stopped being required for it there is nothing to say money ever changed hands. Counting
-   * it made Total Customers exceed Total Orders with no way to reconcile the two, and put
-   * people in the customer list who had never bought anything. 'converted' is written in one
-   * place only — the conversion transaction that also writes the order — so it cannot be set
-   * without a sale behind it.
+   * 'converted' is written in one place only: the conversion transaction that also writes the
+   * order, moves the stock and opens the renewal. So it cannot be set without a sale behind
+   * it, and Total Customers can always be reconciled against Total Orders. A hand-picked
+   * status never counts here — there would be nothing to say money ever changed hands.
    *
    * One person, one row: a repeat buyer has a converted lead per purchase, so the rows are
    * deduplicated by mobile — normalised on write, which is what makes it usable as an

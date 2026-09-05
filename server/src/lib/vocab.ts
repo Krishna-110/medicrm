@@ -23,8 +23,7 @@ export type LeadStatus =
   | 'call_back_later'
   | 'no_response'
   | 'not_interested'
-  | 'converted'
-  | 'sold';
+  | 'converted';
 
 export type LeadSource =
   | 'website'
