@@ -1,14 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, Menu, LogOut, Settings, User, ChevronDown } from 'lucide-react'
+import { Search, Bell, Menu, LogOut, ChevronDown } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
 import { logout } from '@/context/AppContext'
 import { notificationsApi } from '@/api/notifications'
-import { authApi } from '@/api/auth'
-import { usersApi } from '@/api/users'
 import { emitToast } from '@/lib/toast'
-import { Modal } from '@/components/ui/Modal'
-import { Button } from '@/components/ui/Button'
 
 type TopNavProps = {
   title: string
@@ -44,12 +40,6 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
 
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
-  const [showProfile, setShowProfile] = useState(false)
-  const [profileForm, setProfileForm] = useState({ name: '', phone: '', email: '' })
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [showChangePassword, setShowChangePassword] = useState(false)
-  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
-  const [changingPassword, setChangingPassword] = useState(false)
 
   const notificationRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -69,34 +59,7 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  function openProfile() {
-    setShowProfileMenu(false)
-    setProfileForm({
-      name: currentUser?.name ?? '',
-      phone: currentUser?.phone ?? '',
-      email: currentUser?.email ?? '',
-    })
-    setShowProfile(true)
-  }
 
-  async function handleSaveProfile(e: React.FormEvent) {
-    e.preventDefault()
-    if (!currentUser) return
-    setSavingProfile(true)
-    try {
-      const updated = await usersApi.update(currentUser.id, profileForm)
-      // Both, because the signed-in user is held separately from the users list; updating one
-      // would leave the header showing the old name until the next sign-in.
-      dispatch({ type: 'UPDATE_USER', payload: { id: updated.id, updates: updated } })
-      dispatch({ type: 'LOGIN', payload: { user: updated } })
-      emitToast('Profile updated', 'success')
-      setShowProfile(false)
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to update profile')
-    } finally {
-      setSavingProfile(false)
-    }
-  }
 
   async function handleLogout() {
     await logout(dispatch)
@@ -112,29 +75,7 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
     }
   }
 
-  function openChangePassword() {
-    setShowProfileMenu(false)
-    setPwForm({ current: '', next: '', confirm: '' })
-    setShowChangePassword(true)
-  }
 
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault()
-    if (pwForm.next !== pwForm.confirm) {
-      emitToast('New password and confirmation do not match')
-      return
-    }
-    setChangingPassword(true)
-    try {
-      await authApi.changePassword(pwForm.current, pwForm.next)
-      emitToast('Password changed successfully', 'success')
-      setShowChangePassword(false)
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to change password')
-    } finally {
-      setChangingPassword(false)
-    }
-  }
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-ink-200/80 bg-white/85 px-4 backdrop-blur-lg sm:px-6">
@@ -250,22 +191,6 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
               </div>
               <div className="p-1.5">
                 <button
-                  onClick={openProfile}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-50"
-                >
-                  <User className="h-4 w-4 text-ink-400" />
-                  Profile
-                </button>
-                <button
-                  onClick={openChangePassword}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-700 transition-colors hover:bg-ink-50"
-                >
-                  <Settings className="h-4 w-4 text-ink-400" />
-                  Change Password
-                </button>
-              </div>
-              <div className="border-t border-ink-100 p-1.5">
-                <button
                   onClick={handleLogout}
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-danger-600 transition-colors hover:bg-danger-50"
                 >
@@ -278,126 +203,6 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
         </div>
       </div>
 
-      {/*
-        * The signed-in user's own record. Name, phone and email are theirs to change — the
-        * server allows exactly those on your own account. Employee ID, role and location are
-        * shown but not editable: a caller changing their own role or the location they sell
-        * from is refused server-side, so offering the field would only produce a 403.
-        */}
-      <Modal
-        isOpen={showProfile}
-        onClose={() => setShowProfile(false)}
-        title="Profile"
-        description="Your account details."
-        size="sm"
-      >
-        <form onSubmit={handleSaveProfile} className="space-y-4">
-          <div>
-            <label className="field-label" htmlFor="topnav-profile-name">Full Name</label>
-            <input
-              id="topnav-profile-name"
-              type="text"
-              required
-              value={profileForm.name}
-              onChange={(e) => setProfileForm((f) => ({ ...f, name: e.target.value }))}
-              className="field-input"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="topnav-profile-phone">Phone</label>
-            <input
-              id="topnav-profile-phone"
-              type="tel"
-              required
-              value={profileForm.phone}
-              onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}
-              className="field-input"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="topnav-profile-email">Email</label>
-            <input
-              id="topnav-profile-email"
-              type="email"
-              required
-              value={profileForm.email}
-              onChange={(e) => setProfileForm((f) => ({ ...f, email: e.target.value }))}
-              className="field-input"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 rounded-xl bg-ink-50 px-3.5 py-3 text-sm">
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-ink-400">Employee ID</p>
-              <p className="font-medium text-ink-800">{currentUser?.employeeId || '—'}</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-ink-400">Role</p>
-              <p className="font-medium capitalize text-ink-800">{currentUser?.role}</p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-[11px] uppercase tracking-wide text-ink-400">Location</p>
-              <p className="font-medium text-ink-800">{currentUser?.locationName || 'Not assigned'}</p>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 border-t border-ink-100 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setShowProfile(false)}>Cancel</Button>
-            <Button type="submit" loading={savingProfile}>Save Changes</Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={showChangePassword}
-        onClose={() => setShowChangePassword(false)}
-        title="Change Password"
-        description="Enter your current password and choose a new one."
-        size="sm"
-      >
-        <form onSubmit={handleChangePassword} className="space-y-4">
-          <div>
-            <label className="field-label" htmlFor="topnav-current-password">Current Password</label>
-            <input
-              id="topnav-current-password"
-              type="password"
-              required
-              value={pwForm.current}
-              onChange={(e) => setPwForm((f) => ({ ...f, current: e.target.value }))}
-              className="field-input"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="topnav-new-password">New Password</label>
-            <input
-              id="topnav-new-password"
-              type="password"
-              required
-              minLength={6}
-              value={pwForm.next}
-              onChange={(e) => setPwForm((f) => ({ ...f, next: e.target.value }))}
-              className="field-input"
-              placeholder="Minimum 6 characters"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="topnav-confirm-new-password">Confirm New Password</label>
-            <input
-              id="topnav-confirm-new-password"
-              type="password"
-              required
-              minLength={6}
-              value={pwForm.confirm}
-              onChange={(e) => setPwForm((f) => ({ ...f, confirm: e.target.value }))}
-              className="field-input"
-            />
-          </div>
-          <div className="flex justify-end gap-3 border-t border-ink-100 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setShowChangePassword(false)}>Cancel</Button>
-            <Button type="submit" loading={changingPassword}>Change Password</Button>
-          </div>
-        </form>
-      </Modal>
     </header>
   )
 }

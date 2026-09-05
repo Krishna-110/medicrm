@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 type ModalProps = {
@@ -32,7 +33,15 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
 
   if (!isOpen) return null
 
-  return (
+  /*
+   * Rendered into <body>, not where it is written. `position: fixed` is relative to the
+   * viewport only while no ancestor establishes a containing block — and transform, filter,
+   * backdrop-filter and will-change all do. The top bar carries backdrop-blur, so the Profile
+   * and Change Password dialogs, which live inside it, had their full-screen overlay clamped
+   * to the 64px height of the header: a sliver of white across the top and nothing else.
+   * A portal puts every modal at the top of the DOM, out of reach of whatever wraps its owner.
+   */
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 overflow-y-auto">
       <div className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px] animate-fade-in" onClick={onClose} />
       <div
@@ -52,6 +61,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
         </div>
         <div className="overflow-y-auto px-6 py-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
