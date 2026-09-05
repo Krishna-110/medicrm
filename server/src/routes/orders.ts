@@ -3,7 +3,6 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route } from '../lib/errors.js';
-import { isAdmin } from '../auth/scope.js';
 import { serializeOrder } from '../lib/serialize.js';
 import { recalculateOrderTotals } from '../services/orders.js';
 import { auditUpdate } from '../services/audit.js';
@@ -31,24 +30,17 @@ ordersRouter.patch(
     const id = param(req, 'id');
     const body = req.body ?? {};
 
-    // Editing an order is admin-only, but which refusal depends on whether the caller can see
-    // it. A flat 404 was the old behaviour, inherited from a row filter that simply matched
-    // nothing — which meant a caller clicking their OWN order, visible on their own screen,
-    // was told it did not exist.
-    //
-    // An order inside their scope therefore gets 403 and a reason: they are already looking at
-    // it, so nothing is revealed. Anything else stays 404, since naming it would confirm an
-    // order exists to someone with no business knowing that.
-    if (!isAdmin(actor)) {
-      const visible = await scopedFor(actor).order.findFirst({
-        where: { id, deletedAt: null },
-        select: { id: true },
-      });
-      if (!visible) throw ApiError.notFound('Order not found');
-      throw ApiError.forbidden("You don't have permission to update this order.");
-    }
-
-    const before = await prisma.order.findFirst({ where: { id, deletedAt: null } });
+    /*
+     * A caller works their own order: moving it through the stages as it is prepared and
+     * shipped, and recording the payment they collected. Editing was admin-only, so every one
+     * of those controls sat on their screen and answered 403 — the order was theirs, the work
+     * was theirs, and the app refused it.
+     *
+     * The scoped client is what confines them to their own: another caller's order is not
+     * found, so it returns 404 without confirming the order exists. An admin's scope is empty,
+     * so the same lookup reaches everything.
+     */
+    const before = await scopedFor(actor).order.findFirst({ where: { id, deletedAt: null } });
     if (!before) throw ApiError.notFound('Order not found');
 
     const data: Record<string, unknown> = {};
