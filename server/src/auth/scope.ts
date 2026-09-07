@@ -131,6 +131,34 @@ export function assertNoPrivilegeEscalation(actor: Actor, patch: Record<string, 
   }
 }
 
+/**
+ * Nobody changes their own role or status — an admin included.
+ *
+ * The escalation guard above exempts admins, which left an admin free to set their own role to
+ * caller. It takes effect immediately, and the signed-in user is read once at load, so the
+ * admin menu stays on screen while every action behind it starts answering "Admins only" —
+ * the mistake reads as a broken app rather than a choice. On a system with one admin it locks
+ * everybody out of stock, users and locations with no way back through the UI.
+ *
+ * Compared against the stored row rather than merely present in the patch: the edit form
+ * submits every field, so an admin correcting their own phone number sends role along with it
+ * and must not be refused for that.
+ */
+export function assertNoSelfRoleChange(
+  actor: Actor,
+  targetUserId: string,
+  patch: Record<string, unknown>,
+  current: { role: string; status: string },
+): void {
+  if (targetUserId !== actor.userId) return;
+  if ('role' in patch && patch.role !== current.role) {
+    throw ApiError.forbidden('You cannot change your own role — ask another admin to do it.');
+  }
+  if ('status' in patch && patch.status !== current.status) {
+    throw ApiError.forbidden('You cannot deactivate your own account.');
+  }
+}
+
 export function assertOwnsNotification(actor: Actor, recipientUserId: string): void {
   if (isAdmin(actor)) return;
   if (recipientUserId !== actor.userId) {

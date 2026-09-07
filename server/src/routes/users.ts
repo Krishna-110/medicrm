@@ -4,7 +4,7 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route } from '../lib/errors.js';
-import { assertCanEditUser, assertNoPrivilegeEscalation, isAdmin, requireAdmin } from '../auth/scope.js';
+import { assertCanEditUser, assertNoPrivilegeEscalation, assertNoSelfRoleChange, isAdmin, requireAdmin } from '../auth/scope.js';
 import { serializeUser } from '../lib/serialize.js';
 import { auditCreate, auditUpdate } from '../services/audit.js';
 
@@ -73,6 +73,10 @@ usersRouter.patch(
 
     const before = await scopedFor(actor).user.findFirst({ where: { id, deletedAt: null } });
     if (!before) throw ApiError.notFound('User not found');
+
+    // Needs the stored row to compare against, so it runs here rather than beside the
+    // escalation check above — an unchanged role arriving with an ordinary self-edit is fine.
+    assertNoSelfRoleChange(actor, id, body, before);
 
     const data: Record<string, unknown> = {};
     for (const f of EDITABLE) if (f in body) data[f] = body[f] ?? null;

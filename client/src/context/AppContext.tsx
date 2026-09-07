@@ -317,6 +317,41 @@ function AppProvider({ children }: { children: ReactNode }) {
     boot();
   }, []);
 
+  /*
+   * Re-read the signed-in user whenever this tab is returned to.
+   *
+   * The role is otherwise read once at boot and kept in memory, so an admin who changes
+   * someone's role while that person has the app open leaves them with the old menu: Stock and
+   * User Management still listed, and every action behind them refused as "Admins only". The
+   * server was right each time and the screen was simply out of date, which reads as the app
+   * being broken. Focus is enough — the change is made in another window, so returning to this
+   * one is exactly when the answer needs to be current — and it costs one request, not a poll.
+   */
+  useEffect(() => {
+    function revalidate() {
+      if (!getToken()) return;
+      authApi
+        .me()
+        .then(({ user }) => dispatch({ type: 'LOGIN', payload: { user } }))
+        // Silent: a dropped request leaves the role as it was, which the server enforces on
+        // every write regardless. Nothing here decides access, it only keeps the menu honest.
+        .catch(() => {});
+    }
+    // Focus is not gated on visibilityState: a focused window has the user's attention by
+    // definition, and an embedded browser can report itself hidden while plainly in use —
+    // which would silently switch this off. visibilitychange is gated, since it fires on the
+    // way out as well as the way back.
+    function onVisibility() {
+      if (document.visibilityState === 'visible') revalidate();
+    }
+    window.addEventListener('focus', revalidate);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', revalidate);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
   return (
     <AppContext.Provider value={{ state, dispatch }}>
       {children}
