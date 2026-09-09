@@ -143,16 +143,17 @@ export function Dashboard() {
    * with the app and are already scoped, so a caller counts their own customers and an admin
    * counts everyone's, with no extra request.
    */
-  const customers = useMemo(() => {
-    const byPerson = new Map<string, Lead>()
-    for (const lead of state.leads) {
-      if (lead.status !== 'converted') continue
-      // Falling back to the id keeps a blank mobile from collapsing every such lead into one.
-      const identity = lead.mobile?.trim() || lead.id
-      if (!byPerson.has(identity)) byPerson.set(identity, lead)
-    }
-    return [...byPerson.values()]
-  }, [state.leads])
+  /*
+   * The customer records themselves, written by the conversion that took the money.
+   *
+   * This was derived from leads with status 'converted' and deduped by mobile, which tied a
+   * customer's existence to their lead still being around. Remove the lead and the customer
+   * vanished while the order and the revenue stayed — three paid orders and nought customers
+   * on the same screen, which is exactly as broken as it reads. The rows outlive the lead, so
+   * no dedupe is needed either: the conversion already reuses an existing customer when the
+   * mobile matches.
+   */
+  const customers = state.customers
 
   /*
    * How many customers converted today / this week / this month.
@@ -167,25 +168,24 @@ export function Dashboard() {
    * Monday, month from the 1st. Dates are IST YYYY-MM-DD on both sides, so they compare
    * directly as strings.
    */
+  // New customers won in each period, by the day the customer record was created. Counted off
+  // the same rows as the card above, so the two can never disagree.
   const convertedByPeriod = useMemo(() => {
     const today = istToday()
     const weekStart = istWeekStart()
     const thisMonth = today.slice(0, 7)
-    const inToday = new Set<string>()
-    const inWeek = new Set<string>()
-    const inMonth = new Set<string>()
-
-    for (const lead of state.leads) {
-      if (lead.status !== 'converted') continue
-      const on = lead.convertedDate || lead.createdDate
+    let inToday = 0
+    let inWeek = 0
+    let inMonth = 0
+    for (const c of state.customers) {
+      const on = c.createdDate
       if (!on) continue
-      const identity = lead.mobile?.trim() || lead.id
-      if (on === today) inToday.add(identity)
-      if (on >= weekStart) inWeek.add(identity)
-      if (on.slice(0, 7) === thisMonth) inMonth.add(identity)
+      if (on === today) inToday += 1
+      if (on >= weekStart) inWeek += 1
+      if (on.slice(0, 7) === thisMonth) inMonth += 1
     }
-    return { today: inToday.size, thisWeek: inWeek.size, thisMonth: inMonth.size }
-  }, [state.leads])
+    return { today: inToday, thisWeek: inWeek, thisMonth: inMonth }
+  }, [state.customers])
 
   // Follow-ups are already loaded and already scoped to the signed-in caller, so "my tasks"
   // is a filter, not a fetch. Overdue first: yesterday's missed call matters more than a
@@ -563,13 +563,11 @@ export function Dashboard() {
                   ))}
                 </tr>
               </thead>
+              {/* Rows are not clickable: a customer outlives the lead they came from, so for
+                  one whose lead has since been removed there is no lead record to open. */}
               <tbody>
                 {customers.map((c) => (
-                  <tr
-                    key={c.id}
-                    onClick={() => { setShowCustomers(false); navigate(`/leads/${c.id}`) }}
-                    className="cursor-pointer border-b border-ink-50 transition-colors last:border-0 hover:bg-primary-50/30"
-                  >
+                  <tr key={c.id} className="border-b border-ink-50 last:border-0">
                     <td className="py-3 pl-1 pr-3 font-medium text-ink-900">{c.customerName}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-ink-600">{c.mobile}</td>
                     <td className="whitespace-nowrap px-3 py-3 text-ink-600">{c.alternateNumber || '-'}</td>

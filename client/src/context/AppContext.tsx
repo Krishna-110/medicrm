@@ -11,7 +11,8 @@ import { renewalsApi } from '@/api/renewals';
 import { followUpsApi } from '@/api/followUps';
 import { notificationsApi } from '@/api/notifications';
 import { miscApi } from '@/api/misc';
-import { locationsApi } from '@/api/locations';
+import { locationsApi } from '@/api/locations'
+import { customersApi } from '@/api/customers';
 import { getToken, setToken, clearToken } from '@/api/client';
 
 const initialState: AppState = {
@@ -25,12 +26,13 @@ const initialState: AppState = {
   medicines: [],
   dashboard: null,
   locations: [],
+  customers: [],
   searchQuery: '',
   booting: true,
 };
 
 export async function loadAll(dispatch: Dispatch<AppAction>) {
-  const [users, leads, orders, renewals, followUps, notifications, medicines, dashboard, locations] = await Promise.all([
+  const [users, leads, orders, renewals, followUps, notifications, medicines, dashboard, locations, customers] = await Promise.all([
     usersApi.list(),
     leadsApi.list(),
     ordersApi.list(),
@@ -40,10 +42,11 @@ export async function loadAll(dispatch: Dispatch<AppAction>) {
     medicinesApi.list(),
     miscApi.dashboard(),
     locationsApi.list(),
+    customersApi.list(),
   ]);
   dispatch({
     type: 'HYDRATE',
-    payload: { users, leads, orders, renewals, followUps, notifications, medicines, dashboard, locations },
+    payload: { users, leads, orders, renewals, followUps, notifications, medicines, dashboard, locations, customers },
   });
 }
 

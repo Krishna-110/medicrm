@@ -188,6 +188,24 @@ export type DashboardStats = {
   salesByCaller: { callerId: string; callerName: string; totalSales: number }[];
 };
 
+/**
+ * Someone who has actually bought, written by the conversion and outliving the lead it came
+ * from. The dashboard used to infer these from leads with status 'converted', so removing a
+ * lead took the customer with it while the order and the money stayed on screen.
+ */
+export type Customer = {
+  id: string;
+  customerName: string;
+  mobile: string;
+  alternateNumber?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  /** The day they became a customer. */
+  createdDate: string;
+};
+
 export type AppState = {
   currentUser: User | null;
   users: User[];
@@ -197,6 +215,7 @@ export type AppState = {
   followUps: FollowUp[];
   notifications: Notification[];
   medicines: Medicine[];
+  customers: Customer[];
   dashboard: DashboardStats | null;
   locations: Location[];
   searchQuery: string;
@@ -211,6 +230,7 @@ export type HydratePayload = {
   followUps: FollowUp[];
   notifications: Notification[];
   medicines: Medicine[];
+  customers: Customer[];
   locations: Location[];
   dashboard: DashboardStats;
 };

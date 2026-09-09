@@ -269,3 +269,28 @@ export const serializeNotification = (n: Notification) => ({
   read: n.isRead,
   createdAt: n.createdAt.toISOString(),
 });
+
+/**
+ * A customer: someone who has actually bought.
+ *
+ * The dashboard used to derive its customer list from leads with status 'converted', which
+ * meant the count collapsed the moment a lead was removed while the orders and the money
+ * stayed — three paid orders and nought customers on the same screen. These rows are written
+ * by the conversion itself and outlive the lead, so they answer the question directly.
+ */
+export const serializeCustomer = (c: {
+  id: string; fullName: string; primaryMobile: string; alternateMobile: string | null;
+  address: string | null; city: string | null; state: string | null; pincode: string | null;
+  createdAt: Date;
+}) => ({
+  id: c.id,
+  customerName: c.fullName,
+  mobile: c.primaryMobile,
+  alternateNumber: c.alternateMobile ?? undefined,
+  address: c.address ?? undefined,
+  city: c.city ?? undefined,
+  state: c.state ?? undefined,
+  pincode: c.pincode ?? undefined,
+  // The day they became a customer, which is what "Customers Converted" counts by period.
+  createdDate: d10(c.createdAt),
+});
