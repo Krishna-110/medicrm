@@ -62,6 +62,22 @@ export function Renewals() {
     return state.users.find((u) => u.id === id)?.name ?? id
   }
 
+  /*
+   * The cycle that replaced this one, by the predecessor link renewing writes.
+   *
+   * A renewed row shows the date it was itself due, which is in the past and answers nothing
+   * useful — the reason it is renewed is that a new cycle took over, and when THAT falls due
+   * is what anyone reading the row actually wants. The successor is already loaded as its own
+   * row; this just names it in place.
+   */
+  const nextCycleOf = useMemo(() => {
+    const byPredecessor = new Map<string, (typeof renewals)[number]>()
+    for (const r of renewals) {
+      if (r.previousRenewalId) byPredecessor.set(r.previousRenewalId, r)
+    }
+    return byPredecessor
+  }, [renewals])
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: renewals.length }
     for (const r of renewals) {
@@ -236,6 +252,13 @@ export function Renewals() {
                       </td>
                       <td className="px-3 py-3.5 whitespace-nowrap text-xs text-ink-500">
                         {formatIndianDate(renewal.renewalDate)}
+                        {renewal.status === 'renewed' && (
+                          <span className="mt-0.5 block text-[11px] text-success-700">
+                            {nextCycleOf.get(renewal.id)
+                              ? `next due ${formatIndianDate(nextCycleOf.get(renewal.id)!.renewalDate)}`
+                              : 'no further cycle'}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-3.5">
                         {/*
