@@ -1,3 +1,4 @@
+import { ORDER_CALLER } from '../lib/serialize.js';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
@@ -364,7 +365,7 @@ export async function convertLeadToOrder(
         totalAmount,
         payableAmount: payableAmount(totalAmount, order.discountType, order.discountValue),
       },
-      include: { items: true },
+      include: { items: true, ...ORDER_CALLER },
     });
     await auditCreate(tx, actor, 'orders', priced);
 

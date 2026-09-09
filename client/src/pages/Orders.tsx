@@ -354,6 +354,7 @@ export function Orders() {
               <tr className="border-b border-ink-100 bg-ink-50/50">
                 <th className="pl-5 pr-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Order #</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Customer</th>
+                <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Caller</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Medicines</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Total</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Payment</th>
@@ -365,7 +366,7 @@ export function Orders() {
             <tbody>
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <EmptyState
                       icon={<Package size={26} />}
                       title="No orders found"
@@ -384,6 +385,11 @@ export function Orders() {
                         <span className="font-mono text-xs font-medium text-ink-900">{order.orderNumber}</span>
                       </td>
                       <td className="px-3 py-3.5 font-medium text-ink-900">{order.customerName}</td>
+                      {/* Who sold it. Resolved server-side through the lead, so it still reads
+                          correctly for an order whose lead or caller has since been removed. */}
+                      <td className="px-3 py-3.5 whitespace-nowrap text-ink-600">
+                        {order.callerName ?? <span className="text-ink-400">Unassigned</span>}
+                      </td>
                       <td className="px-3 py-3.5 text-ink-600">
                         {firstMed ? (
                           <span>
@@ -470,6 +476,12 @@ export function Orders() {
                 <p className="mt-1 text-sm font-medium text-ink-900">{selectedOrder.customerName}</p>
               </div>
               <div>
+                <p className="text-xs uppercase tracking-wide text-ink-500">Caller</p>
+                <p className="mt-1 text-sm font-medium text-ink-900">
+                  {selectedOrder.callerName ?? <span className="font-normal text-ink-400">Unassigned</span>}
+                </p>
+              </div>
+              <div className="sm:col-span-2">
                 <p className="text-xs uppercase tracking-wide text-ink-500">Address</p>
                 <p className="mt-1 text-sm text-ink-700">{selectedOrder.address || '--'}</p>
               </div>

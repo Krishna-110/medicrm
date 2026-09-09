@@ -149,18 +149,34 @@ export const serializeOrderItem = (i: OrderItem) => ({
   price: num(i.unitPriceSnapshot),
 });
 
+/**
+ * Who sold it, reached through the lead the order came from.
+ *
+ * Neither relation filters deletedAt on purpose: a removed lead, or a caller who has left,
+ * must still name whoever made the sale. The order and its revenue outlive both, and an order
+ * that cannot say who sold it is no use for asking how a caller is doing.
+ */
+export const ORDER_CALLER = {
+  lead: { select: { assignedCallerId: true, assignedCaller: { select: { name: true } } } },
+} as const;
+
 type Order = {
   id: string; orderNumber: string; leadId: string | null; customerName: string;
   shippingAddress: string; totalAmount: Prisma.Decimal; discountType: string;
   discountValue: Prisma.Decimal; payableAmount: Prisma.Decimal; paymentStatus: string;
   paymentMode: string; stage: string; paymentScreenshot: string | null;
   createdAt: Date; updatedAt: Date; items?: OrderItem[];
+  lead?: { assignedCallerId: string | null; assignedCaller: { name: string } | null } | null;
 };
 export const serializeOrder = (o: Order) => ({
   id: o.id,
   orderNumber: o.orderNumber,
   leadId: o.leadId,
   customerName: o.customerName,
+  // Only present where the query asked for it; undefined reads as "not known here" rather
+  // than as "nobody sold this".
+  assignedCaller: o.lead?.assignedCallerId ?? undefined,
+  callerName: o.lead?.assignedCaller?.name ?? undefined,
   address: o.shippingAddress,
   medicines: (o.items ?? []).map(serializeOrderItem),
   totalAmount: num(o.totalAmount),

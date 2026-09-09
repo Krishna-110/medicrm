@@ -3,13 +3,13 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route } from '../lib/errors.js';
-import { serializeOrder } from '../lib/serialize.js';
+import { ORDER_CALLER, serializeOrder } from '../lib/serialize.js';
 import { recalculateOrderTotals } from '../services/orders.js';
 import { auditUpdate } from '../services/audit.js';
 
 export const ordersRouter = Router();
 
-const WITH_ITEMS = { items: { orderBy: { createdAt: 'asc' } } } as const;
+const WITH_ITEMS = { items: { orderBy: { createdAt: 'asc' } }, ...ORDER_CALLER } as const;
 
 ordersRouter.get(
   '/',

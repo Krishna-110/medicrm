@@ -4,7 +4,7 @@ import { prisma } from '../db/prisma.js';
 import { scopedFor } from '../db/scoped.js';
 import { actorOf } from '../auth/auth.js';
 import { ApiError, param, route, toDateOrNull } from '../lib/errors.js';
-import { FOLLOW_UP_CONTACT, RENEWAL_CONTACT, serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
+import { FOLLOW_UP_CONTACT, ORDER_CALLER, RENEWAL_CONTACT, serializeFollowUp, serializeOrder, serializeRenewal } from '../lib/serialize.js';
 import { findCatalogueProductByName } from '../services/catalogue.js';
 import { assertStockCovers, soonestRenewal } from '../services/conversion.js';
 import { changeStock, resolveSellerLocation, stockAt } from '../services/inventory.js';
@@ -199,7 +199,7 @@ renewalsRouter.post(
       // Orders page would show an empty one until the next reload.
       const withItems = await tx.order.findUniqueOrThrow({
         where: { id: created.id },
-        include: { items: { orderBy: { createdAt: 'asc' } } },
+        include: { items: { orderBy: { createdAt: 'asc' } }, ...ORDER_CALLER },
       });
       return { renewal: renewed, order: withItems, next: nextCycle };
     });

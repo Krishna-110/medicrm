@@ -108,6 +108,9 @@ export type Order = {
   orderNumber: string;
   leadId: string | null;
   customerName: string;
+  /** Who sold it: the lead's caller. Survives the lead and the caller being removed. */
+  assignedCaller?: string;
+  callerName?: string;
   address: string;
   medicines: { name: string; quantity: number; price: number }[];
   totalAmount: number;
