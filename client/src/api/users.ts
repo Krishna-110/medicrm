@@ -9,5 +9,7 @@ export const usersApi = {
   list: () => api.get<User[]>('/users'),
   create: (data: UserWrite) => api.post<User>('/users', data),
   update: (id: string, updates: UserWrite) => api.patch<User>(`/users/${id}`, updates),
-  remove: (id: string) => api.delete<void>(`/users/${id}`),
+  /** Removing a caller takes their leads, follow-ups and renewals with them; the counts say how many. */
+  remove: (id: string) =>
+    api.delete<{ removed: { leads: number; followUps: number; renewals: number } }>(`/users/${id}`),
 };

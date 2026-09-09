@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useApp } from '@/context/AppContext'
+import { useApp, loadAll } from '@/context/AppContext'
 import { usersApi } from '@/api/users'
 import { emitToast } from '@/lib/toast'
 import type { User, UserRole } from '@/types'
@@ -88,8 +88,24 @@ export function Users() {
 
   async function deleteUser(id: string) {
     try {
-      await usersApi.remove(id)
+      const { removed } = await usersApi.remove(id)
       dispatch({ type: 'DELETE_USER', payload: { id } })
+      /*
+       * Their leads, follow-ups and renewals went with the account, and the store still holds
+       * every one of them — without this reload the lists and the calendar keep drawing work
+       * that no longer exists until the page is refreshed.
+       */
+      const gone = [
+        removed.leads && `${removed.leads} lead${removed.leads === 1 ? '' : 's'}`,
+        removed.followUps && `${removed.followUps} follow-up${removed.followUps === 1 ? '' : 's'}`,
+        removed.renewals && `${removed.renewals} renewal${removed.renewals === 1 ? '' : 's'}`,
+      ].filter(Boolean)
+      if (gone.length) {
+        await loadAll(dispatch)
+        emitToast(`Caller removed, along with their ${gone.join(', ')}`, 'success')
+      } else {
+        emitToast('Caller removed', 'success')
+      }
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to delete user')
     }
