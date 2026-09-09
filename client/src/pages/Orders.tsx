@@ -463,8 +463,8 @@ export function Orders() {
                           {nextStage && (
                             <button
                               type="button"
-                              title="Advance to next stage"
-                              aria-label={`Advance ${order.orderNumber} a stage`}
+                              title="Mark as the next stage"
+                              aria-label={`Mark ${order.orderNumber} as the next stage`}
                               onClick={() => requestMoveStage(order, nextStage)}
                               className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
                             >
@@ -779,7 +779,7 @@ export function Orders() {
                   icon={<ArrowRight className="h-4 w-4" />}
                   onClick={() => requestMoveStage(selectedOrder, getNextStage(selectedOrder.stage))}
                 >
-                  Advance to {STAGES.find((s) => s.key === getNextStage(selectedOrder.stage))?.label}
+                  Mark as {STAGES.find((s) => s.key === getNextStage(selectedOrder.stage))?.label}
                 </Button>
               )}
             </div>
