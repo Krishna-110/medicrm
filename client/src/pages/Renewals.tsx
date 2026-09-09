@@ -238,11 +238,22 @@ export function Renewals() {
                         {formatIndianDate(renewal.renewalDate)}
                       </td>
                       <td className="px-3 py-3.5">
-                        <span
-                          className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${getDaysRemainingPill(renewal.daysRemaining)}`}
-                        >
-                          {renewal.daysRemaining}
-                        </span>
+                        {/*
+                         * A renewed cycle has no days left to count. daysRemaining is measured
+                         * from the expiry date alone and keeps running whatever happens, so a
+                         * cycle renewed weeks ago reported "-15" in an alarming red — a
+                         * countdown on work that was finished, against a date that stopped
+                         * mattering the moment it was renewed.
+                         */}
+                        {renewal.status === 'renewed' ? (
+                          <span className="text-xs text-ink-400">—</span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${getDaysRemainingPill(renewal.daysRemaining)}`}
+                          >
+                            {renewal.daysRemaining}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-3.5 text-ink-600">{callerName(renewal.assignedCaller)}</td>
                       <td className="px-3 py-3.5">
