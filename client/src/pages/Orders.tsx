@@ -84,6 +84,13 @@ export function Orders() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [discountForm, setDiscountForm] = useState<{ type: DiscountType; value: string }>({ type: 'none', value: '0' })
   const [savingDiscount, setSavingDiscount] = useState(false)
+  /*
+   * A reversal waiting to be confirmed. Moving an order forward is the ordinary path and goes
+   * straight through; moving it BACK undoes work already recorded — an order marked shipped
+   * being pulled back to packed — so it asks first. Both routes to it, the arrow on the list
+   * row and the button in the dialog, go through the same check.
+   */
+  const [pendingBack, setPendingBack] = useState<{ order: Order; to: OrderStage } | null>(null)
 
   const orders = state.orders ?? []
 
@@ -150,6 +157,17 @@ export function Orders() {
     // orders, read as money received rather than as work in progress.
     { id: 'payments', label: 'Payments', count: payments.length },
   ]
+
+  /** Asks before a reversal; forward moves go straight through. */
+  function requestMoveStage(order: Order, to: OrderStage | null) {
+    if (!to) return
+    const goingBack = STAGE_ORDER.indexOf(to) < STAGE_ORDER.indexOf(order.stage)
+    if (goingBack) {
+      setPendingBack({ order, to })
+      return
+    }
+    void handleMoveStage(order, to)
+  }
 
   /** Moves an order one step along the pipeline, either way. */
   async function handleMoveStage(order: Order, to: OrderStage | null) {
@@ -436,7 +454,7 @@ export function Orders() {
                               type="button"
                               title="Back to previous stage"
                               aria-label={`Move ${order.orderNumber} back a stage`}
-                              onClick={() => handleMoveStage(order, getPreviousStage(order.stage))}
+                              onClick={() => requestMoveStage(order, getPreviousStage(order.stage))}
                               className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
                             >
                               <ArrowLeft className="h-4 w-4" />
@@ -447,7 +465,7 @@ export function Orders() {
                               type="button"
                               title="Advance to next stage"
                               aria-label={`Advance ${order.orderNumber} a stage`}
-                              onClick={() => handleMoveStage(order, nextStage)}
+                              onClick={() => requestMoveStage(order, nextStage)}
                               className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
                             >
                               <ArrowRight className="h-4 w-4" />
@@ -633,8 +651,17 @@ export function Orders() {
               </div>
             </div>
 
-            {/* Discount */}
-            <div className="border-t border-ink-200 pt-4">
+            {/*
+             * Discount and Payment, side by side on a wide screen and stacked on a narrow one.
+             *
+             * Payment is a sibling of the whole discount GROUP, not of its individual controls.
+             * It used to sit inside that row with ml-auto, which held while the row fitted on
+             * one line and fell apart the moment a discount was applied: the extra Amount field
+             * pushed the row to wrap, and ml-auto threw Payment out to the right of the second
+             * line, detached from its own label's column and reading as broken.
+             */}
+            <div className="flex flex-col gap-4 border-t border-ink-200 pt-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-ink-500">Discount</p>
               <div className="flex flex-wrap items-end gap-3">
                 <div>
@@ -668,26 +695,28 @@ export function Orders() {
                 <Button variant="secondary" loading={savingDiscount} onClick={handleApplyDiscount}>
                   Apply Discount
                 </Button>
-                {/*
-                 * Payment sits here rather than in the footer beside the stage buttons. It
-                 * decides whether the order counts towards Sales, which makes it a fact about
-                 * the money — the same kind of thing as the discount next to it — and not a
-                 * navigation control.
-                 */}
-                <div className="ml-auto">
-                  <label className="field-label" htmlFor="order-payment-status">Payment</label>
-                  <select
-                    id="order-payment-status"
-                    value={selectedOrder.paymentStatus}
-                    onChange={(e) => handlePaymentChange(selectedOrder, e.target.value as PaymentStatus)}
-                    className="field-input w-auto"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="partial">Partial</option>
-                    <option value="paid">Paid</option>
-                    <option value="refunded">Refunded</option>
-                  </select>
-                </div>
+              </div>
+              </div>
+
+              {/*
+               * Payment belongs here rather than in the footer beside the stage buttons: it
+               * decides whether the order counts towards Sales, which makes it a fact about the
+               * money — the same kind of thing as the discount beside it — and not a navigation
+               * control.
+               */}
+              <div className="shrink-0">
+                <label className="field-label" htmlFor="order-payment-status">Payment</label>
+                <select
+                  id="order-payment-status"
+                  value={selectedOrder.paymentStatus}
+                  onChange={(e) => handlePaymentChange(selectedOrder, e.target.value as PaymentStatus)}
+                  className="field-input w-auto"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="partial">Partial</option>
+                  <option value="paid">Paid</option>
+                  <option value="refunded">Refunded</option>
+                </select>
               </div>
             </div>
 
@@ -739,7 +768,7 @@ export function Orders() {
                 <Button
                   variant="secondary"
                   icon={<ArrowLeft className="h-4 w-4" />}
-                  onClick={() => handleMoveStage(selectedOrder, getPreviousStage(selectedOrder.stage))}
+                  onClick={() => requestMoveStage(selectedOrder, getPreviousStage(selectedOrder.stage))}
                 >
                   Back to {STAGES.find((s) => s.key === getPreviousStage(selectedOrder.stage))?.label}
                 </Button>
@@ -748,11 +777,54 @@ export function Orders() {
                 <Button
                   variant="primary"
                   icon={<ArrowRight className="h-4 w-4" />}
-                  onClick={() => handleMoveStage(selectedOrder, getNextStage(selectedOrder.stage))}
+                  onClick={() => requestMoveStage(selectedOrder, getNextStage(selectedOrder.stage))}
                 >
                   Advance to {STAGES.find((s) => s.key === getNextStage(selectedOrder.stage))?.label}
                 </Button>
               )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Reversal confirmation. Portalled like every modal, so it sits above the order dialog
+          it was opened from rather than inside it. */}
+      <Modal
+        isOpen={!!pendingBack}
+        onClose={() => setPendingBack(null)}
+        title="Move this order back?"
+        size="sm"
+      >
+        {pendingBack && (
+          <div className="space-y-5">
+            <p className="text-sm text-ink-600">
+              <span className="font-semibold text-ink-900">{pendingBack.order.orderNumber}</span> goes
+              from{' '}
+              <span className="font-medium text-ink-800">
+                {STAGES.find((st) => st.key === pendingBack.order.stage)?.label ?? pendingBack.order.stage}
+              </span>{' '}
+              back to{' '}
+              <span className="font-medium text-ink-800">
+                {STAGES.find((st) => st.key === pendingBack.to)?.label ?? pendingBack.to}
+              </span>
+              . Anyone working from the stage lists will see it as not yet done.
+            </p>
+            <div className="flex flex-col-reverse gap-3 border-t border-ink-100 pt-4 sm:flex-row sm:justify-end">
+              <Button type="button" variant="secondary" onClick={() => setPendingBack(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                icon={<ArrowLeft className="h-4 w-4" />}
+                onClick={() => {
+                  const { order, to } = pendingBack
+                  setPendingBack(null)
+                  void handleMoveStage(order, to)
+                }}
+              >
+                Move back
+              </Button>
             </div>
           </div>
         )}

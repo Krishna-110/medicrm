@@ -289,12 +289,13 @@ export async function convertLeadToOrder(
         customerName: customer.fullName,
         shippingAddress: [lead.address, lead.city, lead.state, lead.pincode].filter(Boolean).join(', '),
         stage: 'confirmed',
-        // Paid only where there is something to show for it. The screenshot was compulsory
-        // once, so every order could safely be booked as paid; now that it is optional, a
-        // cash sale and an online one recorded without proof would both have claimed payment
-        // nobody had evidenced. Pending is the honest starting point — an admin marks it paid
-        // from the order once the money is confirmed.
-        paymentStatus: screenshot ? 'paid' : 'pending',
+        // Paid on creation, restored deliberately: a conversion is the moment the money is
+        // taken, and the caller composing the sale is the one taking it. Keying this to the
+        // screenshot instead left every cash sale sitting on Pending — and since Sales counts
+        // paid orders only, the dashboard read nought until somebody went back and flipped
+        // each one by hand. An admin can still mark it Pending, Partial or Refunded on the
+        // order itself when the money does not in fact arrive.
+        paymentStatus: 'paid',
         discountType,
         discountValue,
         createdBy: actor.userId,
