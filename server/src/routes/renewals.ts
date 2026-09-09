@@ -78,14 +78,21 @@ renewalsRouter.post(
       throw ApiError.badRequest('A percentage discount cannot exceed 100');
     }
 
-    // Renewing closes this cycle, places the repeat order, and opens the next one. Stamping
-    // renewedAt alone ended the relationship: the customer dropped off the list entirely,
-    // nobody would ever be prompted to call them again, and the repeat sale went unrecorded.
-    // previousRenewalId has been in the schema from the start for exactly this chain.
-    const { renewal: updated, order, next } = await prisma.$transaction(async (tx) => {
-      const renewed = await tx.renewal.update({
+    /*
+     * Renewing places the repeat order and rolls THIS renewal forward. The cycle does not
+     * close and no second row is created.
+     *
+     * It used to stamp renewedAt and open a successor, which is defensible as a record but
+     * read badly: the row being looked at froze with its old date, lost its Renew button, and
+     * its days figure kept counting down past zero into a red negative, while the date that
+     * had actually moved appeared on a new row further down the list. One renewal per
+     * customer's course, whose date advances each time it is renewed, is what a caller is
+     * actually tracking. The repeat sales remain fully recorded as orders, which is where the
+     * money already lives.
+     */
+    const { renewal: updated, order } = await prisma.$transaction(async (tx) => {
+      const renewed = await tx.renewal.findUniqueOrThrow({
         where: { id },
-        data: { renewedAt: new Date() },
         include: RENEWAL_CONTACT,
       });
 
@@ -165,22 +172,25 @@ renewalsRouter.post(
       }
       await auditCreate(tx, actorOf(req), 'orders', created);
 
-      // The next cycle describes the reorder just placed, not the one before it: add a
-      // medicine here and the next call is about both. It falls due when the shortest line
-      // runs out — one order, one call, dated so nothing lapses unnoticed. An empty days
-      // field carries the previous cycle's length over, so a 15-day course stays 15. The
-      // grace window is always inherited; the reorder does not expose it.
+      /*
+       * The same row, moved on to describe the reorder just placed: add a medicine here and
+       * the next call is about both. It falls due when the shortest line runs out — one order,
+       * one call, dated so nothing lapses unnoticed. An empty days field carries the previous
+       * cycle's length over, so a 15-day course stays 15, and the grace window is inherited.
+       *
+       * Dated from NOW, not from the old due date: a renewal left until three days after it
+       * fell due gives a full course from the day it was actually taken, not one already three
+       * days short.
+       */
       const prevSupply = Math.max(istDayDiff(renewed.renewalDate, renewed.orderDate), 1);
       const supplyDays = priced.length ? soonestRenewal(priced) : prevSupply;
       const graceDays = Math.max(istDayDiff(renewed.expiryDate, renewed.renewalDate), 1);
-      const from = renewed.renewedAt!;
+      const from = new Date();
 
-      const nextCycle = await tx.renewal.create({
+      const rolled = await tx.renewal.update({
+        where: { id },
         data: {
-          customerId: renewed.customerId,
-          customerName: renewed.customerName,
-          // Points at the order just placed, not the original — that is what the next cycle
-          // is a renewal of.
+          // Points at the order just placed — that is what this renewal is now a renewal of.
           orderId: created.id,
           // Only a single-medicine reorder has one product to point at.
           productId: priced.length === 1 ? (priced[0]?.product?.id ?? null) : null,
@@ -188,9 +198,8 @@ renewalsRouter.post(
           orderDate: from,
           renewalDate: addDays(from, supplyDays),
           expiryDate: addDays(from, supplyDays + graceDays),
-          assignedCallerId: renewed.assignedCallerId,
-          previousRenewalId: renewed.id,
-          createdBy: actorOf(req).userId,
+          // Stays null: the renewal is live, and rolling it forward is not closing it.
+          renewedAt: null,
         },
         include: RENEWAL_CONTACT,
       });
@@ -201,17 +210,11 @@ renewalsRouter.post(
         where: { id: created.id },
         include: { items: { orderBy: { createdAt: 'asc' } }, ...ORDER_CALLER },
       });
-      return { renewal: renewed, order: withItems, next: nextCycle };
+      return { renewal: rolled, order: withItems };
     });
 
-    // The cycle just opened is returned alongside the one just closed. Without it the client
-    // is told a renewal was completed but never told its successor exists, and the Renewals
-    // page — the very list the user is looking at — silently omits the next call to make.
-    res.json({
-      renewal: serializeRenewal(updated),
-      order: serializeOrder(order),
-      nextRenewal: serializeRenewal(next),
-    });
+    // One renewal, rolled forward, plus the order it placed. There is no successor to report.
+    res.json({ renewal: serializeRenewal(updated), order: serializeOrder(order) });
   }),
 );
 

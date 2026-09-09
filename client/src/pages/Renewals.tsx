@@ -95,16 +95,12 @@ export function Renewals() {
     { id: 'renewed', label: 'Renewed', count: statusCounts.renewed ?? 0 },
   ]
 
-  // Renewing now places a repeat order, so the store gets both: the closed cycle and the
-  // order it produced. The next cycle arrives on the following load rather than being
-  // synthesised here — the server decides its dates, and guessing them would invent a second
-  // source of truth for something already computed.
-  function handleRenewed({ renewal, order, nextRenewal }: RenewResponse) {
+  // Renewing rolls the same renewal forward and places a repeat order, so there are exactly
+  // two things to record: the moved row and the new order. No successor is created, so the
+  // list keeps one row per customer's course with its date advanced.
+  function handleRenewed({ renewal, order }: RenewResponse) {
     dispatch({ type: 'UPDATE_RENEWAL', payload: { id: renewal.id, updates: renewal } })
     dispatch({ type: 'ADD_ORDER', payload: { order } })
-    // Renewing closes one cycle and opens the next. Only the closure was recorded here, so
-    // this list — the one being looked at — dropped the customer until it was fetched again.
-    dispatch({ type: 'ADD_RENEWAL', payload: { renewal: nextRenewal } })
   }
 
   function openReminder(renewal: Renewal) {

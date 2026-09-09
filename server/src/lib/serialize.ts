@@ -161,7 +161,7 @@ export const ORDER_CALLER = {
 } as const;
 
 type Order = {
-  id: string; orderNumber: string; leadId: string | null; customerName: string;
+  id: string; orderNumber: string; leadId: string | null; customerId: string; customerName: string;
   shippingAddress: string; totalAmount: Prisma.Decimal; discountType: string;
   discountValue: Prisma.Decimal; payableAmount: Prisma.Decimal; paymentStatus: string;
   paymentMode: string; stage: string; paymentScreenshot: string | null;
@@ -172,6 +172,7 @@ export const serializeOrder = (o: Order) => ({
   id: o.id,
   orderNumber: o.orderNumber,
   leadId: o.leadId,
+  customerId: o.customerId,
   customerName: o.customerName,
   // Only present where the query asked for it; undefined reads as "not known here" rather
   // than as "nobody sold this".

@@ -94,15 +94,27 @@ export function Orders() {
 
   const orders = state.orders ?? []
 
-  /**
-   * The renewal an order came from, if any.
+  /*
+   * Whether this order was a repeat purchase, worked out from the customer's own orders.
    *
-   * Derived rather than stored: renewing writes the next cycle pointing at the order it just
-   * placed, so an order whose renewal has a predecessor was a reorder. A first sale gets a
-   * renewal too, but that one has no predecessor.
+   * It used to look for a renewal pointing at this order that had a predecessor, which only
+   * held while renewing created a new renewal each time. A renewal now rolls forward, so its
+   * orderId names the LATEST reorder only and every earlier one would have read as a first
+   * sale. The orders themselves answer it without ambiguity: anything after a customer's first
+   * is a reorder, whatever produced it.
    */
-  const sourceRenewal = (order: Order) =>
-    (state.renewals ?? []).find(r => r.orderId === order.id && !!r.previousRenewalId)
+  const isReorder = (order: Order) =>
+    orders.some(
+      o =>
+        o.customerId === order.customerId &&
+        o.id !== order.id &&
+        (o.createdDate < order.createdDate ||
+          (o.createdDate === order.createdDate && o.orderNumber < order.orderNumber)),
+    )
+
+  /** The renewal this customer's course is on, for naming the medicine on a reorder. */
+  const courseOf = (order: Order) =>
+    (state.renewals ?? []).find(r => r.customerId === order.customerId)
 
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = { all: orders.length }
@@ -303,7 +315,8 @@ export function Orders() {
                   </tr>
                 )}
                 {filteredOrders.map((order) => {
-                  const renewal = sourceRenewal(order)
+                  const reorder = isReorder(order)
+                  const course = reorder ? courseOf(order) : undefined
                   return (
                     <tr
                       key={order.id}
@@ -316,13 +329,13 @@ export function Orders() {
                       <td className="px-3 py-3.5 font-medium text-ink-900">{order.orderNumber}</td>
                       <td className="px-3 py-3.5 text-ink-700">{order.customerName}</td>
                       <td className="px-3 py-3.5 text-xs text-ink-600">
-                        {renewal ? (
+                        {reorder ? (
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); navigate('/renewals') }}
                             className="font-medium text-primary-600 hover:text-primary-700"
                           >
-                            Renewal — {renewal.medicineName}
+                            Renewal{course ? ` — ${course.medicineName}` : ''}
                           </button>
                         ) : (
                           <span className="text-ink-500">First order</span>
@@ -744,10 +757,12 @@ export function Orders() {
                   None on file — this order predates proof being kept per order.
                 </p>
               )}
-              {sourceRenewal(selectedOrder) && (
+              {isReorder(selectedOrder) && (
                 <p className="mt-2 text-sm text-ink-600">
                   Reorder of{' '}
-                  <span className="font-medium text-ink-900">{sourceRenewal(selectedOrder)!.medicineName}</span>.{' '}
+                  <span className="font-medium text-ink-900">
+                    {courseOf(selectedOrder)?.medicineName ?? 'an earlier order'}
+                  </span>.{' '}
                   <button
                     type="button"
                     onClick={() => navigate('/renewals')}

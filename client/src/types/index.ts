@@ -107,6 +107,8 @@ export type Order = {
   id: string;
   orderNumber: string;
   leadId: string | null;
+  /** The buyer, so a repeat purchase can be spotted from the orders alone. */
+  customerId: string;
   customerName: string;
   /** Who sold it: the lead's caller. Survives the lead and the caller being removed. */
   assignedCaller?: string;
