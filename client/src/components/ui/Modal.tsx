@@ -8,6 +8,17 @@ type ModalProps = {
   title: string
   description?: string
   children: ReactNode
+  /**
+   * Actions pinned below the scrolling body, outside it.
+   *
+   * A form that puts its own buttons at the end of `children` loses them off the bottom on a
+   * phone, where the fields stack into far more height than the viewport. Making that row
+   * `sticky` inside the body only traded one fault for two: the fields scrolled underneath an
+   * opaque bar and read as cut in half, and its background overran the panel's rounded bottom
+   * corner. As a sibling of the body it is simply always there, and the body's scrollbar stops
+   * above it.
+   */
+  footer?: ReactNode
   size?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
@@ -18,7 +29,7 @@ const sizeClasses = {
   xl: 'max-w-4xl',
 }
 
-export function Modal({ isOpen, onClose, title, description, children, size = 'md' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, description, children, footer, size = 'md' }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -60,6 +71,10 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
           </button>
         </div>
         <div className="overflow-y-auto px-6 py-5">{children}</div>
+        {footer && (
+          // Rounded to match the panel: a square-cornered bar would cut the corner off.
+          <div className="shrink-0 rounded-b-2xl border-t border-ink-200 bg-white px-6 py-4">{footer}</div>
+        )}
       </div>
     </div>,
     document.body,

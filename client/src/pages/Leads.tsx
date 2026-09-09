@@ -471,8 +471,34 @@ export function Leads() {
         onClose={() => setShowModal(false)}
         title={editingLead ? 'Edit Lead' : 'Add New Lead'}
         size="xl"
+        footer={
+          <div className="flex flex-wrap justify-end gap-3">
+            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
+              Cancel
+            </Button>
+            {/*
+             * Converting from inside the form, so the payment screenshot and address already on
+             * screen carry into the dialog instead of being asked for a second time. Saves
+             * first: an unsaved edit would otherwise be dropped by a conversion happening a
+             * moment later. Hidden once converted — that transition only goes one way.
+             */}
+            {editingLead && editingLead.status !== 'converted' && (
+              <Button
+                type="button"
+                variant="success"
+                icon={<ShoppingCart size={15} />}
+                onClick={handleSaveAndConvert}
+              >
+                Save &amp; Convert
+              </Button>
+            )}
+            {/* Submits the form it sits outside of, by id — the footer is a sibling of the
+                scrolling body, not part of it. */}
+            <Button type="submit" form="lead-form">{editingLead ? 'Update' : 'Add'} Lead</Button>
+          </div>
+        }
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form id="lead-form" onSubmit={handleSubmit} className="space-y-4">
           {/* Customer Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -669,34 +695,6 @@ export function Leads() {
             </>
           )}
 
-          {/*
-           * Stuck to the bottom of the modal's scroll area. On a phone the form is roughly
-           * 1150px of stacked fields in an 800px viewport — taller still with the keyboard up —
-           * so these buttons sat several hundred pixels below the fold and the form read as
-           * having no way to submit it.
-           */}
-          <div className="sticky bottom-0 -mx-6 -mb-5 mt-2 flex flex-wrap justify-end gap-3 border-t border-ink-200 bg-white px-6 py-4">
-            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
-              Cancel
-            </Button>
-            {/*
-             * Converting from inside the form, so the payment screenshot and address already on
-             * screen carry into the dialog instead of being asked for a second time. Saves
-             * first: an unsaved edit would otherwise be dropped by a conversion happening a
-             * moment later. Hidden once converted — that transition only goes one way.
-             */}
-            {editingLead && editingLead.status !== 'converted' && (
-              <Button
-                type="button"
-                variant="success"
-                icon={<ShoppingCart size={15} />}
-                onClick={handleSaveAndConvert}
-              >
-                Save &amp; Convert
-              </Button>
-            )}
-            <Button type="submit">{editingLead ? 'Update' : 'Add'} Lead</Button>
-          </div>
         </form>
       </Modal>
 
