@@ -81,7 +81,6 @@ const STATUS_BAR: Record<LeadStatus, string> = {
   no_response: 'bg-ink-400',
   not_interested: 'bg-danger-500',
   converted: 'bg-success-500',
-  sold: 'bg-emerald-600',
 }
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
@@ -547,7 +546,7 @@ export function Dashboard() {
       >
         {customers.length === 0 ? (
           <p className="py-8 text-center text-sm text-ink-400">
-            No customers yet. A lead becomes one when it is converted to an order or marked sold.
+            No customers yet. A lead becomes one when it is converted to an order.
           </p>
         ) : (
           <div className="overflow-x-auto">
