@@ -17,10 +17,10 @@ const DEFAULT_TENURE = 30
 
 const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-type SaleLine = { id: string; name: string; days: number; quantity: number }
+type SaleLine = { id: string; name: string; days: number; quantity: string }
 
 let lineSeq = 0
-const emptyLine = (): SaleLine => ({ id: `sale-${++lineSeq}`, name: '', days: DEFAULT_TENURE, quantity: 1 })
+const emptyLine = (): SaleLine => ({ id: `sale-${++lineSeq}`, name: '', days: DEFAULT_TENURE, quantity: '' })
 
 /**
  * Composing a sale: which medicines, tenure (for renewal), quantity (for price and stock), and proof of payment.
@@ -91,16 +91,22 @@ export function ConvertLeadModal({
   const priced = useMemo(() => lines.map(line => {
     const medicine = state.medicines.find(m => m.name.toLowerCase() === line.name.trim().toLowerCase())
     const unitPrice = medicine?.unitPrice ?? 0
+    const qtyNum = parseInt(line.quantity, 10)
+    const hasValidQty = Number.isInteger(qtyNum) && qtyNum > 0
+    const quantity = hasValidQty ? qtyNum : 0
     const stock = medicine && preview?.locationName
       ? medicine.locations?.find(l => l.locationName === preview.locationName)?.quantity ?? 0
       : null
+    const short = stock !== null && hasValidQty && stock < quantity
     return {
       ...line,
       medicine,
       unitPrice,
-      lineTotal: unitPrice * line.quantity,
+      hasValidQty,
+      numericQuantity: quantity,
+      lineTotal: unitPrice * quantity,
       stock,
-      covered: stock === null ? false : stock >= line.quantity,
+      short,
     }
   }), [lines, state.medicines, preview])
 
@@ -118,10 +124,11 @@ export function ConvertLeadModal({
     discountType !== 'none' && (raw < 0 || (discountType === 'percentage' && raw > 100))
   const noLocation = !!preview && preview.locationName === null
   const unknown = chosen.filter(p => !p.medicine)
-  const short = noLocation ? [] : chosen.filter(p => p.medicine && !p.covered)
+  const missingQty = chosen.some(p => !p.hasValidQty)
+  const short = noLocation ? [] : chosen.filter(p => p.medicine && p.short)
   const canSubmit =
     !!preview && !noLocation && chosen.length > 0 && unknown.length === 0 &&
-    !discountInvalid && short.length === 0 && !submitting
+    !discountInvalid && !missingQty && short.length === 0 && !submitting
 
   async function handleConfirm() {
     if (!lead || !canSubmit) return
@@ -131,7 +138,7 @@ export function ConvertLeadModal({
         paymentMode,
         // Deliberately blank for a cash sale rather than carrying a stale image across.
         paymentScreenshot: paymentMode === 'offline' ? '' : screenshot,
-        items: chosen.map(p => ({ name: p.name.trim(), days: p.days, quantity: p.quantity })),
+        items: chosen.map(p => ({ name: p.name.trim(), days: p.days, quantity: p.numericQuantity })),
         discountType,
         discountValue: discountType === 'none' ? 0 : raw,
       }))
@@ -190,10 +197,12 @@ export function ConvertLeadModal({
                       id={`${id}-quantity-${line.id}`}
                       type="number"
                       min={1}
+                      placeholder="1"
                       value={line.quantity}
-                      onChange={e => setLine(line.id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                      onChange={e => setLine(line.id, { quantity: e.target.value })}
+                      onFocus={e => e.target.select()}
                       aria-label={`Quantity for medicine ${idx + 1}`}
-                      className="field-input text-center"
+                      className="field-input text-center placeholder:text-ink-300"
                     />
                   </div>
                   {/* Invisible labels keep these level with the controls above at every width. */}
@@ -246,7 +255,7 @@ export function ConvertLeadModal({
               <AlertTriangle size={14} className="mt-px shrink-0" />
               <span>
                 Not enough stock at <span className="font-semibold">{preview?.locationName}</span> for{' '}
-                {short.map(i => `${i.name} (${i.stock} left, ${i.quantity} needed)`).join(', ')}. Ask an
+                {short.map(i => `${i.name} (${i.stock} left, ${i.numericQuantity} needed)`).join(', ')}. Ask an
                 admin to update the stock before converting.
               </span>
             </p>

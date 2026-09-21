@@ -17,7 +17,7 @@ import type { RenewResponse } from '../../../server/src/lib/contract.js'
  * of supply, not units — the same model as a lead — because the duration is what varies
  * between cycles and what decides when the next renewal falls due.
  */
-type Row = { id: string; name: string; days: string; quantity: number }
+type Row = { id: string; name: string; days: string; quantity: string }
 
 /** The tenures sold, shared with the conversion dialog. */
 const TENURES = [15, 30, 60, 90] as const
@@ -56,7 +56,7 @@ export function RenewOrderModal({
             id: crypto.randomUUID(),
             name: renewal.medicineName,
             days: defaultDays,
-            quantity: 1,
+            quantity: '1',
           }]
         : [],
     )
@@ -81,15 +81,30 @@ export function RenewOrderModal({
 
   const lines = rows.map(r => {
     const days = Number(r.days)
-    const quantity = Math.max(1, Number(r.quantity) || 1)
+    const qtyNum = parseInt(r.quantity, 10)
+    const hasValidQty = Number.isInteger(qtyNum) && qtyNum > 0
+    const quantity = hasValidQty ? qtyNum : 0
     const invalidDays = !r.name.trim() || !Number.isInteger(days) || days < 1
+    const invalidQty = !hasValidQty
     const med = medicineOf(r.name)
     const unitPrice = med?.unitPrice ?? 0
     const stock = med ? med.stockQuantity : null
-    const short = stock !== null && !invalidDays && stock < quantity
-    return { ...r, days, quantity, invalidDays, short, invalid: invalidDays || short, unitPrice, stock, amount: invalidDays ? 0 : unitPrice * quantity }
+    const short = stock !== null && !invalidDays && hasValidQty && stock < quantity
+    return {
+      ...r,
+      days,
+      quantity,
+      hasValidQty,
+      invalidDays,
+      invalidQty,
+      short,
+      invalid: invalidDays || invalidQty || short,
+      unitPrice,
+      stock,
+      amount: invalidDays || invalidQty ? 0 : unitPrice * quantity,
+    }
   })
-  const rowsInvalid = lines.some(l => l.invalidDays)
+  const rowsInvalid = lines.some(l => l.invalidDays || l.invalidQty)
   const short = lines.filter(l => l.short)
   const total = lines.reduce((n, l) => n + l.amount, 0)
 
@@ -196,10 +211,12 @@ export function RenewOrderModal({
                       id={`qty-${line.id}`}
                       type="number"
                       min={1}
+                      placeholder="1"
                       value={line.quantity}
-                      onChange={e => setRow(line.id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                      onChange={e => setRow(line.id, { quantity: e.target.value })}
+                      onFocus={e => e.target.select()}
                       aria-label={`Quantity for medicine ${idx + 1}`}
-                      className="field-input text-center"
+                      className="field-input text-center placeholder:text-ink-300"
                     />
                   </div>
                   <div className="flex w-24 flex-col">
@@ -238,7 +255,7 @@ export function RenewOrderModal({
           </div>
           <button
             type="button"
-            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', days: '30', quantity: 1 }])}
+            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', days: '30', quantity: '' }])}
             className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
           >
             <Plus size={15} /> Add another medicine
