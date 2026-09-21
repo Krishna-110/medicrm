@@ -100,6 +100,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         leads: state.leads.filter((lead) => lead.id !== action.payload.id),
+        followUps: state.followUps.filter((f) => f.leadId !== action.payload.id),
       };
 
     case 'ASSIGN_LEAD':

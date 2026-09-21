@@ -14,7 +14,23 @@ followUpsRouter.get(
   '/',
   route(async (req, res) => {
     const followUps = await scopedFor(actorOf(req)).followUp.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        AND: [
+          {
+            OR: [
+              { leadId: null },
+              { lead: { deletedAt: null } },
+            ],
+          },
+          {
+            OR: [
+              { renewalId: null },
+              { renewal: { deletedAt: null } },
+            ],
+          },
+        ],
+      },
       orderBy: { scheduledAt: 'asc' },
       include: FOLLOW_UP_CONTACT,
     });

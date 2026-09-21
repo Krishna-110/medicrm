@@ -300,9 +300,14 @@ leadsRouter.delete(
     if (!lead) throw ApiError.notFound('Lead not found');
 
     await prisma.$transaction(async (tx) => {
+      const now = new Date();
       const deleted = await tx.lead.update({
         where: { id: lead.id },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: now },
+      });
+      await tx.followUp.updateMany({
+        where: { leadId: lead.id, deletedAt: null },
+        data: { deletedAt: now },
       });
       if (lead.assignedCallerId) await recountAssignedLeads(tx, [lead.assignedCallerId]);
       await auditUpdate(tx, actor, 'leads', lead, deleted);
