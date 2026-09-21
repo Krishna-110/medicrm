@@ -282,11 +282,9 @@ export function Leads() {
       notes: form.notes || undefined,
       leadSource: form.leadSource,
       assignedCaller: form.assignedCaller || undefined,
+      status: form.status,
       nextFollowUp: form.nextFollowUp || undefined,
       followUpSlot: form.followUpSlot || undefined,
-      ...(editingLead ? {
-        status: form.status,
-      } : {}),
     }
 
     try {
@@ -626,9 +624,27 @@ export function Leads() {
                 ))}
               </select>
             </div>
-            {/* Assigning is an admin's decision. A caller's own lead is force-assigned to them
-                by the server, so showing them a picker offered a choice they never had. */}
-            {!isCaller && (
+            {/* For caller: Lead Status aligns side-by-side with Lead Source on the x-axis.
+                For admin: Assigned Caller goes here, and Lead Status sits below. */}
+            {isCaller ? (
+              <div>
+                <label className="field-label" htmlFor="leads-lead-status">Lead Status</label>
+                <select
+                  id="leads-lead-status"
+                  value={form.status}
+                  onChange={e => setForm(f => ({ ...f, status: e.target.value as LeadStatus }))}
+                  className="field-input"
+                  disabled={form.status === 'converted'}
+                >
+                  {form.status === 'converted' && <option value="converted">Converted</option>}
+                  {editableStatusOptions.map(o => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
               <div>
                 <label className="field-label" htmlFor="leads-assigned-caller">Assigned Caller</label>
                 <select
@@ -648,7 +664,7 @@ export function Leads() {
             )}
           </div>
 
-          {editingLead && (
+          {!isCaller && (
             <div>
               <label className="field-label" htmlFor="leads-lead-status">Lead Status</label>
               <select

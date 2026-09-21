@@ -158,6 +158,7 @@ leadsRouter.post(
           disease: text(body.disease),
           notes: body.notes ?? null,
           assignedCallerId,
+          status: (body.status && body.status !== 'converted') ? body.status : 'new',
           leadSource: body.leadSource ?? 'other',
           // Denormalised so the list view and search have something to match on without
           // joining every lead's medicines.
