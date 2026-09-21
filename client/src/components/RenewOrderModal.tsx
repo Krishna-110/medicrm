@@ -158,7 +158,10 @@ export function RenewOrderModal({
           <span className="field-label" id="renew-items-label">Order</span>
           <div className="space-y-2" role="group" aria-labelledby="renew-items-label">
             {lines.map((line, idx) => (
-              <div key={line.id} className="flex flex-wrap items-end gap-2">
+              <div
+                key={line.id}
+                className="rounded-xl border border-ink-200/80 bg-ink-50/40 p-3 sm:border-0 sm:bg-transparent sm:p-0 sm:flex sm:items-end sm:gap-2"
+              >
                 {/*
                  * Medicine and Days both carry a label so their inputs sit on the same line —
                  * without one, the labelled Days box dropped below the label-less picker. The
@@ -168,7 +171,21 @@ export function RenewOrderModal({
                  * lead. The price is the medicine's, once, regardless of days.
                  */}
                 <div className="w-full min-w-0 sm:flex-1">
-                  <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Medicine</label>
+                  <div className="flex items-center justify-between mb-1 sm:mb-0.5">
+                    <label className="block text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                      Medicine {rows.length > 1 ? `#${idx + 1}` : ''}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setRows(rs => rs.filter(r => r.id !== line.id))}
+                      disabled={rows.length === 1}
+                      title="Remove line"
+                      aria-label={`Remove medicine ${idx + 1}`}
+                      className="sm:hidden -mr-1 p-1 text-ink-400 transition-colors hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                   <SearchableSelect
                     value={line.name}
                     onChange={name => setRow(line.id, { name })}
@@ -186,9 +203,11 @@ export function RenewOrderModal({
                  * breakpoint; the input is taller on phones, which a fixed padding could not
                  * have tracked.
                  */}
-                <div className="flex w-full items-stretch gap-2 sm:w-auto">
-                  <div className="flex flex-1 flex-col sm:w-28 sm:flex-none sm:grow-0">
-                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`tenure-${line.id}`}>Tenure</label>
+                <div className="mt-2.5 flex w-full items-end gap-2.5 sm:mt-0 sm:w-auto sm:items-stretch sm:gap-2">
+                  <div className="flex-[3] sm:w-28 sm:flex-none sm:grow-0">
+                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:mb-0.5" htmlFor={`tenure-${line.id}`}>
+                      Tenure
+                    </label>
                     {/* The same bundles the conversion dialog sells, so a reorder cannot run
                         for a period the business does not offer. A cycle carried over from an
                         older free-typed value stays selectable until it is changed. */}
@@ -197,7 +216,7 @@ export function RenewOrderModal({
                       value={line.days}
                       onChange={e => setRow(line.id, { days: e.target.value })}
                       aria-label={`Tenure for medicine ${idx + 1}`}
-                      className="field-input"
+                      className="field-input font-medium px-2.5 sm:px-3"
                     >
                       {!TENURES.some(t => t === line.days) && (
                         <option value={line.days}>{line.days} days</option>
@@ -205,8 +224,10 @@ export function RenewOrderModal({
                       {TENURES.map(t => <option key={t} value={String(t)}>{t} days</option>)}
                     </select>
                   </div>
-                  <div className="flex flex-1 flex-col sm:w-20 sm:flex-none sm:grow-0">
-                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`qty-${line.id}`}>Quantity</label>
+                  <div className="flex-[2] sm:w-20 sm:flex-none sm:grow-0">
+                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:mb-0.5" htmlFor={`qty-${line.id}`}>
+                      Quantity
+                    </label>
                     <input
                       id={`qty-${line.id}`}
                       type="number"
@@ -216,16 +237,18 @@ export function RenewOrderModal({
                       onChange={e => setRow(line.id, { quantity: e.target.value })}
                       onFocus={e => e.target.select()}
                       aria-label={`Quantity for medicine ${idx + 1}`}
-                      className="field-input text-center placeholder:text-ink-300"
+                      className="field-input text-center placeholder:text-ink-300 font-medium px-2"
                     />
                   </div>
-                  <div className="flex w-24 flex-col">
-                    <span aria-hidden className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-transparent">₹</span>
-                    <div className="flex flex-1 items-center justify-end text-sm tabular-nums text-ink-600">
+                  <div className="flex-[3] flex flex-col justify-end text-right sm:w-24 sm:flex-none">
+                    <span className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:invisible sm:mb-0.5 sm:text-transparent">
+                      Total
+                    </span>
+                    <div className="field-input flex items-center justify-end border-transparent bg-transparent px-1 font-semibold text-ink-900 text-sm sm:text-base tabular-nums">
                       {money(line.amount)}
                     </div>
                   </div>
-                  <div className="flex flex-col">
+                  <div className="hidden sm:flex sm:flex-col">
                     <span aria-hidden className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-transparent">·</span>
                     <button
                       type="button"

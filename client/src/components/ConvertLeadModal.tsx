@@ -166,9 +166,24 @@ export function ConvertLeadModal({
           <span className="field-label">Medicines</span>
           <div className="space-y-2">
             {priced.map((line, idx) => (
-              <div key={line.id} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div
+                key={line.id}
+                className="rounded-xl border border-ink-200/80 bg-ink-50/40 p-3 sm:border-0 sm:bg-transparent sm:p-0 sm:flex sm:items-end sm:gap-2"
+              >
                 <div className="w-full min-w-0 sm:flex-1">
-                  <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400">Medicine</span>
+                  <div className="flex items-center justify-between mb-1 sm:mb-0.5">
+                    <span className="block text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                      Medicine {priced.length > 1 ? `#${idx + 1}` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLines(rows => (rows.length === 1 ? [emptyLine()] : rows.filter(r => r.id !== line.id)))}
+                      aria-label={`Remove medicine ${idx + 1}`}
+                      className="sm:hidden -mr-1 p-1 text-ink-400 transition-colors hover:text-danger-600"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                   <SearchableSelect
                     value={line.name}
                     onChange={name => setLine(line.id, { name })}
@@ -178,21 +193,25 @@ export function ConvertLeadModal({
                     emptyText="No medicines found"
                   />
                 </div>
-                <div className="flex w-full items-stretch gap-2 sm:w-auto">
-                  <div className="flex flex-1 flex-col sm:w-28 sm:flex-none">
-                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`${id}-tenure-${line.id}`}>Tenure</label>
+                <div className="mt-2.5 flex w-full items-end gap-2.5 sm:mt-0 sm:w-auto sm:items-stretch sm:gap-2">
+                  <div className="flex-[3] sm:w-28 sm:flex-none">
+                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:mb-0.5" htmlFor={`${id}-tenure-${line.id}`}>
+                      Tenure
+                    </label>
                     <select
                       id={`${id}-tenure-${line.id}`}
                       value={line.days}
                       onChange={e => setLine(line.id, { days: Number(e.target.value) })}
                       aria-label={`Tenure for medicine ${idx + 1}`}
-                      className="field-input"
+                      className="field-input font-medium px-2.5 sm:px-3"
                     >
                       {TENURES.map(t => <option key={t} value={t}>{t} days</option>)}
                     </select>
                   </div>
-                  <div className="flex flex-1 flex-col sm:w-20 sm:flex-none">
-                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`${id}-quantity-${line.id}`}>Quantity</label>
+                  <div className="flex-[2] sm:w-20 sm:flex-none">
+                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:mb-0.5" htmlFor={`${id}-quantity-${line.id}`}>
+                      Quantity
+                    </label>
                     <input
                       id={`${id}-quantity-${line.id}`}
                       type="number"
@@ -202,17 +221,20 @@ export function ConvertLeadModal({
                       onChange={e => setLine(line.id, { quantity: e.target.value })}
                       onFocus={e => e.target.select()}
                       aria-label={`Quantity for medicine ${idx + 1}`}
-                      className="field-input text-center placeholder:text-ink-300"
+                      className="field-input text-center placeholder:text-ink-300 font-medium px-2"
                     />
                   </div>
-                  {/* Invisible labels keep these level with the controls above at every width. */}
-                  <div className="flex flex-col">
-                    <span aria-hidden className="mb-0.5 block text-[10px] uppercase tracking-wide opacity-0">.</span>
-                    <span className="field-input flex min-w-[92px] items-center justify-end border-transparent bg-transparent font-medium text-ink-800">
-                      {money(line.lineTotal)}
+                  {/* Invisible label on desktop keeps levels aligned; on mobile shows Total */}
+                  <div className="flex-[3] flex flex-col justify-end text-right sm:w-24 sm:flex-none">
+                    <span className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:invisible sm:mb-0.5 sm:text-transparent">
+                      Total
                     </span>
+                    <div className="field-input flex items-center justify-end border-transparent bg-transparent px-1 font-semibold text-ink-900 text-sm sm:text-base tabular-nums">
+                      {money(line.lineTotal)}
+                    </div>
                   </div>
-                  <div className="flex flex-col">
+                  {/* Desktop remove button */}
+                  <div className="hidden sm:flex sm:flex-col">
                     <span aria-hidden className="mb-0.5 block text-[10px] uppercase tracking-wide opacity-0">.</span>
                     <button
                       type="button"
