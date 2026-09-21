@@ -648,27 +648,28 @@ export function Leads() {
             )}
           </div>
 
+          {editingLead && (
+            <div>
+              <label className="field-label" htmlFor="leads-lead-status">Lead Status</label>
+              <select
+                id="leads-lead-status"
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value as LeadStatus }))}
+                className="field-input"
+                disabled={form.status === 'converted'}
+              >
+                {form.status === 'converted' && <option value="converted">Converted</option>}
+                {editableStatusOptions.map(o => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {editingLead && (
-              <div>
-                <label className="field-label" htmlFor="leads-lead-status">Lead Status</label>
-                <select
-                  id="leads-lead-status"
-                  value={form.status}
-                  onChange={e => setForm(f => ({ ...f, status: e.target.value as LeadStatus }))}
-                  className="field-input"
-                  disabled={form.status === 'converted'}
-                >
-                  {form.status === 'converted' && <option value="converted">Converted</option>}
-                  {editableStatusOptions.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className={!editingLead && !form.nextFollowUp ? 'sm:col-span-2' : ''}>
+            <div>
               <label className="field-label" htmlFor="leads-next-follow-up">Next Follow-up</label>
               <DateInput
                 id="leads-next-follow-up"
@@ -676,21 +677,18 @@ export function Leads() {
                 onChange={value => setForm(f => ({ ...f, nextFollowUp: value }))}
               />
             </div>
-            {/* Only once there is a day to put a slot in. */}
-            {form.nextFollowUp && (
-              <div>
-                <label className="field-label" htmlFor="leads-follow-up-slot">Time Slot</label>
-                <select
-                  id="leads-follow-up-slot"
-                  value={form.followUpSlot}
-                  onChange={e => setForm(f => ({ ...f, followUpSlot: e.target.value as FollowUpSlot | '' }))}
-                  className="field-input"
-                >
-                  <option value="">Any time</option>
-                  {FOLLOW_UP_SLOTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-            )}
+            <div>
+              <label className="field-label" htmlFor="leads-follow-up-slot">Time Slot</label>
+              <select
+                id="leads-follow-up-slot"
+                value={form.followUpSlot}
+                onChange={e => setForm(f => ({ ...f, followUpSlot: e.target.value as FollowUpSlot | '' }))}
+                className="field-input"
+              >
+                <option value="">Any time</option>
+                {FOLLOW_UP_SLOTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </div>
           </div>
 
         </form>
