@@ -64,3 +64,17 @@ server/*.mjs
 CUsersar186AppDataLocalTempclaudeD--work-medicrm5e42d4a1-c268-450f-ae00-4220ec28ef2cscratchpadtest_payload.json
 CUsersar186AppDataLocalTempleads.json
 CUsersar186AppDataLocalTemptest_auth.ps1
+
+# Test sheets, runner artifacts, and QA workbooks (kept locally, excluded from git)
+*.xlsx
+*.csv
+*test_sheet*.html
+client/public/*test_sheet*.html
+client/public/test_cases.csv
+client/public/*.xlsx
+create_excel_test_sheet.py
+test_sheet_executor.mjs
+test_execution_results.json
+ops/reset_pipeline.ts
+scripts/
+
