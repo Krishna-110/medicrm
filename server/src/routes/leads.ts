@@ -135,6 +135,13 @@ leadsRouter.post(
     const assignedCallerId = isAdmin(actor) ? (body.assignedCaller ?? null) : actor.userId;
     assertLeadAssignable(actor, assignedCallerId);
 
+    let followUpSlot;
+    try {
+      followUpSlot = parseFollowUpSlot(body.followUpSlot);
+    } catch (e) {
+      throw ApiError.badRequest(e instanceof Error ? e.message : 'Invalid slot');
+    }
+
     const lead = await prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
         data: {
@@ -177,6 +184,17 @@ leadsRouter.post(
         await recordAssignment(tx, actor, created.id, null, assignedCallerId);
         await recountAssignedLeads(tx, [assignedCallerId]);
       }
+
+      if ('nextFollowUp' in body && body.nextFollowUp) {
+        await scheduleNextFollowUp(
+          tx,
+          actor,
+          created,
+          toDateOrNull('nextFollowUp', body.nextFollowUp),
+          followUpSlot,
+        );
+      }
+
       await auditCreate(tx, actor, 'leads', created);
 
       return tx.lead.findUniqueOrThrow({ where: { id: created.id }, include: WITH_CHILDREN });

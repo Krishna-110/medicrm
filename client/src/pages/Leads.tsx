@@ -282,12 +282,10 @@ export function Leads() {
       notes: form.notes || undefined,
       leadSource: form.leadSource,
       assignedCaller: form.assignedCaller || undefined,
-      // Status/next follow-up only make sense to set once a lead already exists —
-      // a new lead always starts at 'new' with no follow-up scheduled yet.
+      nextFollowUp: form.nextFollowUp || undefined,
+      followUpSlot: form.followUpSlot || undefined,
       ...(editingLead ? {
         status: form.status,
-        nextFollowUp: form.nextFollowUp || undefined,
-        followUpSlot: form.followUpSlot || undefined,
       } : {}),
     }
 
@@ -305,6 +303,9 @@ export function Leads() {
       }
       const lead = await leadsApi.create(payload)
       dispatch({ type: 'ADD_LEAD', payload: { lead } })
+      if (form.nextFollowUp) {
+        void refreshFollowUps()
+      }
       return lead
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to save lead')
@@ -647,53 +648,50 @@ export function Leads() {
             )}
           </div>
 
-          {editingLead && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="field-label" htmlFor="leads-lead-status">Lead Status</label>
-                  <select
-                    id="leads-lead-status"
-                    value={form.status}
-                    onChange={e => setForm(f => ({ ...f, status: e.target.value as LeadStatus }))}
-                    className="field-input"
-                    disabled={form.status === 'converted'}
-                  >
-                    {form.status === 'converted' && <option value="converted">Converted</option>}
-                    {editableStatusOptions.map(o => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="leads-next-follow-up">Next Follow-up</label>
-                  <DateInput
-                    id="leads-next-follow-up"
-                    value={form.nextFollowUp}
-                    onChange={value => setForm(f => ({ ...f, nextFollowUp: value }))}
-                  />
-                </div>
-                {/* Only once there is a day to put a slot in. */}
-                {form.nextFollowUp && (
-                  <div>
-                    <label className="field-label" htmlFor="leads-follow-up-slot">Time Slot</label>
-                    <select
-                      id="leads-follow-up-slot"
-                      value={form.followUpSlot}
-                      onChange={e => setForm(f => ({ ...f, followUpSlot: e.target.value as FollowUpSlot | '' }))}
-                      className="field-input"
-                    >
-                      <option value="">Any time</option>
-                      {FOLLOW_UP_SLOTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                    </select>
-                  </div>
-                )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {editingLead && (
+              <div>
+                <label className="field-label" htmlFor="leads-lead-status">Lead Status</label>
+                <select
+                  id="leads-lead-status"
+                  value={form.status}
+                  onChange={e => setForm(f => ({ ...f, status: e.target.value as LeadStatus }))}
+                  className="field-input"
+                  disabled={form.status === 'converted'}
+                >
+                  {form.status === 'converted' && <option value="converted">Converted</option>}
+                  {editableStatusOptions.map(o => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-
-            </>
-          )}
+            )}
+            <div className={!editingLead && !form.nextFollowUp ? 'sm:col-span-2' : ''}>
+              <label className="field-label" htmlFor="leads-next-follow-up">Next Follow-up</label>
+              <DateInput
+                id="leads-next-follow-up"
+                value={form.nextFollowUp}
+                onChange={value => setForm(f => ({ ...f, nextFollowUp: value }))}
+              />
+            </div>
+            {/* Only once there is a day to put a slot in. */}
+            {form.nextFollowUp && (
+              <div>
+                <label className="field-label" htmlFor="leads-follow-up-slot">Time Slot</label>
+                <select
+                  id="leads-follow-up-slot"
+                  value={form.followUpSlot}
+                  onChange={e => setForm(f => ({ ...f, followUpSlot: e.target.value as FollowUpSlot | '' }))}
+                  className="field-input"
+                >
+                  <option value="">Any time</option>
+                  {FOLLOW_UP_SLOTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
 
         </form>
       </Modal>
