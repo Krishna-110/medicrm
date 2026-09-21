@@ -142,11 +142,28 @@ leadsRouter.post(
       throw ApiError.badRequest(e instanceof Error ? e.message : 'Invalid slot');
     }
 
+    const customerName = text(body.customerName);
+    const mobile = normalizeIndianMobile(body.mobile) ?? text(body.mobile);
+
     const lead = await prisma.$transaction(async (tx) => {
+      // Idempotency / deduplication guard against rapid double-clicks (within 10 seconds)
+      const recent = await tx.lead.findFirst({
+        where: {
+          customerName,
+          mobile,
+          assignedCallerId,
+          status: 'new',
+          deletedAt: null,
+          createdAt: { gte: new Date(Date.now() - 10000) },
+        },
+        include: WITH_CHILDREN,
+      });
+      if (recent) return recent;
+
       const created = await tx.lead.create({
         data: {
-          customerName: text(body.customerName),
-          mobile: normalizeIndianMobile(body.mobile) ?? text(body.mobile),
+          customerName,
+          mobile,
           alternateNumber: body.alternateNumber ?? null,
           address: text(body.address),
           city: text(body.city),
@@ -279,6 +296,13 @@ leadsRouter.patch(
           toDateOrNull('nextFollowUp', body.nextFollowUp),
           followUpSlot,
         );
+      } else if ('status' in body && targetStatus === 'not_interested') {
+        // Marking not interested without scheduling another call retires pending tasks
+        await tx.followUp.updateMany({
+          where: { leadId: updated.id, status: 'pending', deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        await syncNextFollowUp(tx, updated.id);
       }
 
       await auditUpdate(tx, actor, 'leads', before, updated);

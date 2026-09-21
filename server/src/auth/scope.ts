@@ -75,9 +75,9 @@ export const customerScope = (actor: Actor) =>
     ? {}
     : {
         OR: [
-          { leads: { some: { assignedCallerId: actor.userId } } },
-          { renewals: { some: { assignedCallerId: actor.userId } } },
-          { followUps: { some: { assignedCallerId: actor.userId } } },
+          { leads: { some: { assignedCallerId: actor.userId, deletedAt: null } } },
+          { renewals: { some: { assignedCallerId: actor.userId, deletedAt: null } } },
+          { followUps: { some: { assignedCallerId: actor.userId, deletedAt: null } } },
         ],
       };
 

@@ -113,6 +113,7 @@ export function Leads() {
   const [form, setForm] = useState<LeadForm>(emptyForm)
   const [sortField, setSortField] = useState<SortField>('createdDate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [submitting, setSubmitting] = useState(false)
 
   /*
    * Who this lead can be handed to. A caller may only ever hold their own — the server
@@ -267,6 +268,8 @@ export function Leads() {
   }
 
   async function saveLead(): Promise<Lead | null> {
+    if (submitting) return null
+    setSubmitting(true)
     // Medicines and payment proof are no longer captured here — both belong to the sale, and
     // the sale is composed in the conversion dialog. A lead records who the customer is.
     const payload = {
@@ -308,6 +311,8 @@ export function Leads() {
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to save lead')
       return null
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -339,6 +344,16 @@ export function Leads() {
     // so nothing here needs the lead to exist.
     if (updatedLead) {
       dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
+      dispatch({
+        type: 'SET_FOLLOW_UPS',
+        payload: {
+          followUps: state.followUps.map((f) =>
+            f.leadId === updatedLead.id && f.status === 'pending'
+              ? { ...f, status: 'completed' as const }
+              : f,
+          ),
+        },
+      })
     }
     emitToast(`Lead ${order.customerName} converted to order ${order.orderNumber}!`, 'success')
     setConvertingLead(null)
@@ -487,13 +502,16 @@ export function Leads() {
                 variant="success"
                 icon={<ShoppingCart size={15} />}
                 onClick={handleSaveAndConvert}
+                disabled={submitting}
               >
                 Save &amp; Convert
               </Button>
             )}
             {/* Submits the form it sits outside of, by id — the footer is a sibling of the
                 scrolling body, not part of it. */}
-            <Button type="submit" form="lead-form">{editingLead ? 'Update' : 'Add'} Lead</Button>
+            <Button type="submit" form="lead-form" disabled={submitting} loading={submitting}>
+              {submitting ? 'Saving…' : `${editingLead ? 'Update' : 'Add'} Lead`}
+            </Button>
           </div>
         }
       >

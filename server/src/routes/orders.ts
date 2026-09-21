@@ -9,7 +9,7 @@ import { auditUpdate } from '../services/audit.js';
 
 export const ordersRouter = Router();
 
-const WITH_ITEMS = { items: { orderBy: { createdAt: 'asc' } }, ...ORDER_CALLER } as const;
+const WITH_ITEMS = { items: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' } }, ...ORDER_CALLER } as const;
 
 ordersRouter.get(
   '/',

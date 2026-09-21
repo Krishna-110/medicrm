@@ -156,7 +156,11 @@ medicinesRouter.delete(
     if (!before) throw ApiError.notFound('Medicine not found');
 
     await prisma.$transaction(async (tx) => {
-      const deleted = await tx.product.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.productLocationStock.deleteMany({ where: { productId: id } });
+      const deleted = await tx.product.update({
+        where: { id },
+        data: { deletedAt: new Date(), stockQuantity: 0, isActive: false },
+      });
       await auditUpdate(tx, actor, 'products', before, deleted);
     });
     res.status(204).end();

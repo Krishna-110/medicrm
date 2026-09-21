@@ -124,11 +124,21 @@ function appReducer(state: AppState, action: AppAction): AppState {
         ),
       };
 
-    case 'DELETE_USER':
+    case 'DELETE_USER': {
+      const remainingLeads = state.leads.filter((lead) => lead.assignedCaller !== action.payload.id);
+      const remainingRenewals = state.renewals.filter((r) => r.assignedCaller !== action.payload.id);
+      const removedLeadIds = new Set(state.leads.filter((l) => l.assignedCaller === action.payload.id).map((l) => l.id));
+      const removedRenewalIds = new Set(state.renewals.filter((r) => r.assignedCaller === action.payload.id).map((r) => r.id));
       return {
         ...state,
         users: state.users.filter((user) => user.id !== action.payload.id),
+        leads: remainingLeads,
+        renewals: remainingRenewals,
+        followUps: state.followUps.filter(
+          (f) => (!f.leadId || !removedLeadIds.has(f.leadId)) && (!f.renewalId || !removedRenewalIds.has(f.renewalId)),
+        ),
       };
+    }
 
     case 'ADD_ORDER':
       return { ...state, orders: [action.payload.order, ...state.orders] };
@@ -156,6 +166,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         renewals: state.renewals.filter((renewal) => renewal.id !== action.payload.id),
+        followUps: state.followUps.filter((f) => f.renewalId !== action.payload.id),
       };
 
     case 'ADD_FOLLOW_UP':

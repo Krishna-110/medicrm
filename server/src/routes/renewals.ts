@@ -211,6 +211,12 @@ renewalsRouter.post(
         },
         include: RENEWAL_CONTACT,
       });
+      // Mark any existing reminder follow-up for this cycle completed
+      await tx.followUp.updateMany({
+        where: { renewalId: id, status: 'pending', deletedAt: null },
+        data: { status: 'completed', completedAt: now },
+      });
+
       // Re-read with its lines. serializeOrder builds `medicines` from them, so returning the
       // bare created row would have handed the client an order with nothing in it — and the
       // Orders page would show an empty one until the next reload.
@@ -295,7 +301,14 @@ renewalsRouter.delete(
     const renewal = await db.renewal.findFirst({ where: { id, deletedAt: null } });
     if (!renewal) throw ApiError.notFound('Renewal not found');
 
-    await prisma.renewal.update({ where: { id }, data: { deletedAt: new Date() } });
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.renewal.update({ where: { id }, data: { deletedAt: now } });
+      await tx.followUp.updateMany({
+        where: { renewalId: id, deletedAt: null },
+        data: { deletedAt: now },
+      });
+    });
     res.status(204).end();
   }),
 );

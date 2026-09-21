@@ -85,9 +85,9 @@ describe('read scopes — a caller is narrowed to the exact predicate', () => {
     // Dropping any arm hides customers the caller legitimately works with.
     expect(customerScope(CALLER)).toEqual({
       OR: [
-        { leads: { some: { assignedCallerId: CALLER.userId } } },
-        { renewals: { some: { assignedCallerId: CALLER.userId } } },
-        { followUps: { some: { assignedCallerId: CALLER.userId } } },
+        { leads: { some: { assignedCallerId: CALLER.userId, deletedAt: null } } },
+        { renewals: { some: { assignedCallerId: CALLER.userId, deletedAt: null } } },
+        { followUps: { some: { assignedCallerId: CALLER.userId, deletedAt: null } } },
       ],
     });
   });

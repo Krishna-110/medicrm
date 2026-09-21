@@ -101,6 +101,10 @@ export function Renewals() {
   function handleRenewed({ renewal, order }: RenewResponse) {
     dispatch({ type: 'UPDATE_RENEWAL', payload: { id: renewal.id, updates: renewal } })
     dispatch({ type: 'ADD_ORDER', payload: { order } })
+    const existing = state.followUps.find(f => f.renewalId === renewal.id && f.status === 'pending')
+    if (existing) {
+      dispatch({ type: 'UPDATE_FOLLOW_UP', payload: { id: existing.id, updates: { status: 'completed' } } })
+    }
   }
 
   function openReminder(renewal: Renewal) {

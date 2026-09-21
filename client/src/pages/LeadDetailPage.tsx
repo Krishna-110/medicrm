@@ -159,6 +159,16 @@ export function LeadDetailPage() {
     // the same mistake that broke Schedule Follow-up; the order is what matters here.
     if (updatedLead) {
       dispatch({ type: 'UPDATE_LEAD', payload: { id: updatedLead.id, updates: updatedLead } })
+      dispatch({
+        type: 'SET_FOLLOW_UPS',
+        payload: {
+          followUps: state.followUps.map((f) =>
+            f.leadId === updatedLead.id && f.status === 'pending'
+              ? { ...f, status: 'completed' as const }
+              : f,
+          ),
+        },
+      })
     }
     emitToast(`Converted to order ${order.orderNumber}`, 'success')
     setShowConvertConfirm(false)

@@ -10,6 +10,7 @@ import { findCatalogueProductByName } from './catalogue.js';
 import { lineTotal, nextOrderNumber, payableAmount } from './orders.js';
 import { changeStock, resolveSellerLocation, stockAt } from './inventory.js';
 import { auditCreate, auditUpdate } from './audit.js';
+import { syncNextFollowUp } from './leads.js';
 
 /**
  * Converting a lead into an order.
@@ -379,6 +380,13 @@ export async function convertLeadToOrder(
       data: { status: 'converted', convertedAt: new Date() },
     });
     await auditUpdate(tx, actor, 'leads', lead, converted);
+
+    // Complete any pending follow-ups for this lead so they don't linger on the calendar
+    await tx.followUp.updateMany({
+      where: { leadId: lead.id, status: 'pending', deletedAt: null },
+      data: { status: 'completed', completedAt: new Date() },
+    });
+    await syncNextFollowUp(tx, lead.id);
 
     await tx.leadActivity.create({
       data: {
