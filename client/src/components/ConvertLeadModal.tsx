@@ -11,27 +11,25 @@ import type { Lead } from '@/types'
 type DiscountType = ConvertPayload['discountType']
 type PaymentMode = ConvertPayload['paymentMode']
 
-/** The tenures sold. One unit per day, so tenure is both the supply period and the quantity. */
+/** The tenures sold. Tenure decides the supply period and renewal date. */
 const TENURES = [15, 30, 60, 90] as const
 const DEFAULT_TENURE = 30
 
 const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-type SaleLine = { id: string; name: string; days: number }
+type SaleLine = { id: string; name: string; days: number; quantity: number }
 
 let lineSeq = 0
-const emptyLine = (): SaleLine => ({ id: `sale-${++lineSeq}`, name: '', days: DEFAULT_TENURE })
+const emptyLine = (): SaleLine => ({ id: `sale-${++lineSeq}`, name: '', days: DEFAULT_TENURE, quantity: 1 })
 
 /**
- * Composing a sale: which medicines, for how long, what it costs, and proof of payment.
+ * Composing a sale: which medicines, tenure (for renewal), quantity (for price and stock), and proof of payment.
  *
  * The medicines are chosen here rather than on the lead. A lead is a conversation — what the
  * customer ends up buying is settled at the point of sale, with the catalogue and its prices
  * in front of the caller, so asking for it at capture meant guessing.
  *
- * Pricing is computed here from the catalogue already in the store, which is what makes the
- * total move as lines are added. The server re-prices from its own copy before billing, so
- * this figure is a faithful preview rather than the authority.
+ * Quantity decides the line total and stock deduction. Tenure decides the renewal date.
  */
 export function ConvertLeadModal({
   lead,
@@ -88,6 +86,7 @@ export function ConvertLeadModal({
    * Each line priced against the catalogue, and checked against the seller's location — the
    * lead's caller's, which the preview named. Stock is per location, so the global total
    * would happily approve a sale the shelf cannot cover.
+   * Quantity decides the price and stock deduction; days decides renewal.
    */
   const priced = useMemo(() => lines.map(line => {
     const medicine = state.medicines.find(m => m.name.toLowerCase() === line.name.trim().toLowerCase())
@@ -99,9 +98,9 @@ export function ConvertLeadModal({
       ...line,
       medicine,
       unitPrice,
-      lineTotal: unitPrice * line.days,
+      lineTotal: unitPrice * line.quantity,
       stock,
-      covered: stock === null ? false : stock >= line.days,
+      covered: stock === null ? false : stock >= line.quantity,
     }
   }), [lines, state.medicines, preview])
 
@@ -132,7 +131,7 @@ export function ConvertLeadModal({
         paymentMode,
         // Deliberately blank for a cash sale rather than carrying a stale image across.
         paymentScreenshot: paymentMode === 'offline' ? '' : screenshot,
-        items: chosen.map(p => ({ name: p.name.trim(), days: p.days })),
+        items: chosen.map(p => ({ name: p.name.trim(), days: p.days, quantity: p.quantity })),
         discountType,
         discountValue: discountType === 'none' ? 0 : raw,
       }))
@@ -144,7 +143,7 @@ export function ConvertLeadModal({
   }
 
   return (
-    <Modal isOpen={!!lead} onClose={onClose} title="Convert Lead to Order" size="md">
+    <Modal isOpen={!!lead} onClose={onClose} title="Convert Lead to Order" size="lg">
       <div className="space-y-5">
         <p className="text-sm text-ink-600">
           Converting <span className="font-semibold text-ink-900">{lead?.customerName}</span> creates
@@ -173,7 +172,7 @@ export function ConvertLeadModal({
                   />
                 </div>
                 <div className="flex w-full items-stretch gap-2 sm:w-auto">
-                  <div className="flex flex-1 flex-col sm:w-24 sm:flex-none">
+                  <div className="flex flex-1 flex-col sm:w-28 sm:flex-none">
                     <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`${id}-tenure-${line.id}`}>Tenure</label>
                     <select
                       id={`${id}-tenure-${line.id}`}
@@ -185,7 +184,19 @@ export function ConvertLeadModal({
                       {TENURES.map(t => <option key={t} value={t}>{t} days</option>)}
                     </select>
                   </div>
-                  {/* Invisible labels keep these level with the two above at every width. */}
+                  <div className="flex flex-1 flex-col sm:w-20 sm:flex-none">
+                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`${id}-quantity-${line.id}`}>Quantity</label>
+                    <input
+                      id={`${id}-quantity-${line.id}`}
+                      type="number"
+                      min={1}
+                      value={line.quantity}
+                      onChange={e => setLine(line.id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                      aria-label={`Quantity for medicine ${idx + 1}`}
+                      className="field-input text-center"
+                    />
+                  </div>
+                  {/* Invisible labels keep these level with the controls above at every width. */}
                   <div className="flex flex-col">
                     <span aria-hidden className="mb-0.5 block text-[10px] uppercase tracking-wide opacity-0">.</span>
                     <span className="field-input flex min-w-[92px] items-center justify-end border-transparent bg-transparent font-medium text-ink-800">
@@ -235,7 +246,7 @@ export function ConvertLeadModal({
               <AlertTriangle size={14} className="mt-px shrink-0" />
               <span>
                 Not enough stock at <span className="font-semibold">{preview?.locationName}</span> for{' '}
-                {short.map(i => `${i.name} (${i.stock} left, ${i.days} needed)`).join(', ')}. Ask an
+                {short.map(i => `${i.name} (${i.stock} left, ${i.quantity} needed)`).join(', ')}. Ask an
                 admin to update the stock before converting.
               </span>
             </p>

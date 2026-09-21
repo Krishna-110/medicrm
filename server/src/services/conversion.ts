@@ -39,12 +39,9 @@ const DEFAULT_SUPPLY_DAYS = 30;
 
 /**
  * Days between a course running out and the renewal being written off.
- *
- * renewalDate is when the medicine runs out — the renewal shows as due from then. expiryDate
- * is the end of the window to act, after which renewalStatus() calls it overdue. The gap is
- * how long a caller has to chase it before it counts as lost.
+ * Set to 0 (no grace period).
  */
-const RENEWAL_GRACE_DAYS = 7;
+const RENEWAL_GRACE_DAYS = 0;
 
 /**
  * When an order needs renewing: the day its shortest line runs out.
@@ -59,11 +56,11 @@ export const soonestRenewal = (lines: { days: number }[]): number =>
 export type QuoteLine = {
   productId: string | null;
   name: string;
-  /** Units, which equal the days of supply — one unit per day. */
+  /** Units ordered, deciding line pricing and stock deduction. */
   quantity: number;
   unitPrice: Prisma.Decimal;
   lineTotal: Prisma.Decimal;
-  /** Days of supply; equal to quantity, and what decides when the renewal falls due. */
+  /** Days of supply; what decides when the renewal falls due. */
   days: number;
 };
 
@@ -74,27 +71,32 @@ export type QuoteLine = {
  * figure the user approves is produced by the same code that later bills it. Computing the
  * preview separately would have been easy and would have drifted.
  */
-/** A medicine and its tenure, as chosen at the point of sale. */
-export type QuoteRequest = { productId?: string | null; name: string; days: number };
+/** A medicine, its tenure, and its quantity, as chosen at the point of sale. */
+export type QuoteRequest = {
+  productId?: string | null;
+  name: string;
+  days: number;
+  quantity?: number;
+};
 
 /**
  * Prices an explicit list of medicines.
  *
- * The list arrives from the conversion dialog, where the sale is actually composed. It used
- * to be read off the lead, which meant the medicines had to be guessed at capture time —
- * before anyone knew what the customer would buy.
+ * The list arrives from the conversion dialog, where the sale is actually composed.
+ * Quantity decides the line total and stock deduction; tenure (days) decides when renewal falls due.
  */
 export async function quoteItems(
   db: Pick<Prisma.TransactionClient, 'product'>,
   items: QuoteRequest[],
   fallbackUnitPrice: Prisma.Decimal | number = 0,
 ): Promise<{ lines: QuoteLine[]; totalAmount: Prisma.Decimal }> {
-  // One unit per day of supply: days is the quantity. Twenty days is twenty units, billed at
-  // twenty times the unit price and taking twenty off stock.
   const requested = items
     .map((m) => {
       const days = Number(m.days) || DEFAULT_SUPPLY_DAYS;
-      return { productId: m.productId ?? null, name: String(m.name ?? '').trim(), days, quantity: days };
+      const quantity = m.quantity != null && Number(m.quantity) > 0
+        ? Math.max(1, Number(m.quantity))
+        : days;
+      return { productId: m.productId ?? null, name: String(m.name ?? '').trim(), days, quantity };
     })
     .filter((m) => m.name);
 
@@ -129,9 +131,8 @@ export async function quoteItems(
 }
 
 /**
- * Refuses a sale the catalogue cannot cover. Days are units, so a 20-day order needs 20 in
- * stock; if it is not there the whole order is rejected and an admin has to restock first —
- * they are the only role that can. Replaces the old "fulfil anyway and floor at zero".
+ * Refuses a sale the catalogue cannot cover. Quantity decides stock needed;
+ * if it is not there the whole order is rejected and an admin has to restock first.
  */
 export function assertStockCovers(name: string, available: number, needed: number) {
   if (available < needed) {

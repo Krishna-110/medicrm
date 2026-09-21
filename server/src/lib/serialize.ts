@@ -228,7 +228,7 @@ export const serializeRenewal = (r: Renewal) => ({
   orderDate: d10(r.orderDate),
   renewalDate: d10(r.renewalDate),
   expiryDate: d10(r.expiryDate),
-  daysRemaining: daysRemaining(r.expiryDate),
+  daysRemaining: daysRemaining(r.renewalDate),
   assignedCaller: r.assignedCallerId ?? undefined,
   // The order this cycle belongs to, and whether it descends from an earlier one. Together
   // they are what lets a payment be traced back to the renewal that produced it: an order

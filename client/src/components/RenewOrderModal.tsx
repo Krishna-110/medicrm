@@ -17,7 +17,7 @@ import type { RenewResponse } from '../../../server/src/lib/contract.js'
  * of supply, not units — the same model as a lead — because the duration is what varies
  * between cycles and what decides when the next renewal falls due.
  */
-type Row = { id: string; name: string; days: string }
+type Row = { id: string; name: string; days: string; quantity: number }
 
 /** The tenures sold, shared with the conversion dialog. */
 const TENURES = [15, 30, 60, 90] as const
@@ -47,14 +47,16 @@ export function RenewOrderModal({
 
   // Reset per renewal, so lines typed for one are never carried into the next. The renewal's
   // own medicine is the starting point, its Days prefilled from the current cycle's length —
-  // everything else is added deliberately.
   useEffect(() => {
+    const prevDays = renewal ? daysBetween(renewal.orderDate, renewal.renewalDate) : 30
+    const defaultDays = (TENURES as readonly number[]).includes(prevDays) && prevDays <= 30 ? String(prevDays) : '30'
     setRows(
       renewal
         ? [{
             id: crypto.randomUUID(),
             name: renewal.medicineName,
-            days: String(daysBetween(renewal.orderDate, renewal.renewalDate)),
+            days: defaultDays,
+            quantity: 1,
           }]
         : [],
     )
@@ -79,14 +81,13 @@ export function RenewOrderModal({
 
   const lines = rows.map(r => {
     const days = Number(r.days)
+    const quantity = Math.max(1, Number(r.quantity) || 1)
     const invalidDays = !r.name.trim() || !Number.isInteger(days) || days < 1
     const med = medicineOf(r.name)
     const unitPrice = med?.unitPrice ?? 0
-    // One unit per day of supply: days is the quantity, so the line bills days × unit price
-    // and needs `days` units in stock. A catalogue medicine without the stock blocks the sale.
     const stock = med ? med.stockQuantity : null
-    const short = stock !== null && !invalidDays && stock < days
-    return { ...r, days, invalidDays, short, invalid: invalidDays || short, unitPrice, stock, amount: invalidDays ? 0 : unitPrice * days }
+    const short = stock !== null && !invalidDays && stock < quantity
+    return { ...r, days, quantity, invalidDays, short, invalid: invalidDays || short, unitPrice, stock, amount: invalidDays ? 0 : unitPrice * quantity }
   })
   const rowsInvalid = lines.some(l => l.invalidDays)
   const short = lines.filter(l => l.short)
@@ -113,7 +114,7 @@ export function RenewOrderModal({
     setSubmitting(true)
     try {
       const result = await renewalsApi.renew(renewal.id, {
-        items: lines.map(l => ({ name: l.name.trim(), days: l.days })),
+        items: lines.map(l => ({ name: l.name.trim(), days: l.days, quantity: l.quantity })),
         paymentMode,
         // Deliberately blank for a cash sale rather than carrying a stale image across.
         paymentScreenshot: paymentMode === 'offline' ? '' : screenshot,
@@ -130,7 +131,7 @@ export function RenewOrderModal({
   }
 
   return (
-    <Modal isOpen={!!renewal} onClose={onClose} title="Renew and reorder" size="sm">
+    <Modal isOpen={!!renewal} onClose={onClose} title="Renew and reorder" size="lg">
       <div className="space-y-4">
         <p className="text-sm text-ink-600">
           Placing a repeat order of{' '}
@@ -171,7 +172,7 @@ export function RenewOrderModal({
                  * have tracked.
                  */}
                 <div className="flex w-full items-stretch gap-2 sm:w-auto">
-                  <div className="flex flex-1 flex-col sm:w-24 sm:flex-none sm:grow-0">
+                  <div className="flex flex-1 flex-col sm:w-28 sm:flex-none sm:grow-0">
                     <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`tenure-${line.id}`}>Tenure</label>
                     {/* The same bundles the conversion dialog sells, so a reorder cannot run
                         for a period the business does not offer. A cycle carried over from an
@@ -188,6 +189,18 @@ export function RenewOrderModal({
                       )}
                       {TENURES.map(t => <option key={t} value={String(t)}>{t} days</option>)}
                     </select>
+                  </div>
+                  <div className="flex flex-1 flex-col sm:w-20 sm:flex-none sm:grow-0">
+                    <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-ink-400" htmlFor={`qty-${line.id}`}>Quantity</label>
+                    <input
+                      id={`qty-${line.id}`}
+                      type="number"
+                      min={1}
+                      value={line.quantity}
+                      onChange={e => setRow(line.id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                      aria-label={`Quantity for medicine ${idx + 1}`}
+                      className="field-input text-center"
+                    />
                   </div>
                   <div className="flex w-24 flex-col">
                     <span aria-hidden className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-transparent">₹</span>
@@ -217,7 +230,7 @@ export function RenewOrderModal({
                 )}
                 {line.short && (
                   <p className="w-full text-xs font-medium text-danger-600">
-                    Only {line.stock} of {line.name} in stock, {line.days} needed.
+                    Only {line.stock} of {line.name} in stock, {line.quantity} needed.
                   </p>
                 )}
               </div>
@@ -225,7 +238,7 @@ export function RenewOrderModal({
           </div>
           <button
             type="button"
-            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', days: '30' }])}
+            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', days: '30', quantity: 1 }])}
             className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
           >
             <Plus size={15} /> Add another medicine

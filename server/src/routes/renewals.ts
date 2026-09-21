@@ -51,22 +51,25 @@ renewalsRouter.post(
     const rawItems: unknown = req.body?.items;
     const items = (Array.isArray(rawItems) && rawItems.length
       ? rawItems
-      : [{ name: renewal.medicineName }]) as { name?: unknown; days?: unknown }[];
+      : [{ name: renewal.medicineName }]) as { name?: unknown; days?: unknown; quantity?: unknown }[];
 
     // Blank days fall back to the length of the cycle being renewed.
     const defaultDays = Math.max(istDayDiff(renewal.renewalDate, renewal.orderDate), 1);
 
     const lines = items.map((item) => {
       const name = String(item?.name ?? '').trim();
-      // Days of supply, and — one unit per day — the quantity too: a 20-day reorder is 20
-      // units, priced and stock-deducted as such. 0 means "not given, use the current cycle".
       const rawDays = item?.days == null ? 0 : Number(item.days);
       if (!name) throw ApiError.badRequest('Every line needs a medicine');
       if (rawDays !== 0 && (!Number.isInteger(rawDays) || rawDays < 1)) {
         throw ApiError.badRequest(`Days for ${name} must be a whole number of 1 or more`);
       }
       const days = rawDays || defaultDays;
-      return { name, quantity: days, days };
+      const rawQuantity = item?.quantity == null ? null : Number(item.quantity);
+      if (rawQuantity !== null && (!Number.isInteger(rawQuantity) || rawQuantity < 1)) {
+        throw ApiError.badRequest(`Quantity for ${name} must be a whole number of 1 or more`);
+      }
+      const quantity = rawQuantity ?? days;
+      return { name, quantity, days };
     });
     // Same rule as a first sale: the screenshot is recorded when given and never required.
     const paymentMode = req.body?.paymentMode === 'offline' ? 'offline' : 'online';
@@ -178,14 +181,19 @@ renewalsRouter.post(
        * one call, dated so nothing lapses unnoticed. An empty days field carries the previous
        * cycle's length over, so a 15-day course stays 15, and the grace window is inherited.
        *
-       * Dated from NOW, not from the old due date: a renewal left until three days after it
-       * fell due gives a full course from the day it was actually taken, not one already three
-       * days short.
+       * Early renewals extend from the current renewal date: if the customer still has supply
+       * remaining, the new supply is added on top so they don't lose any of their days!
+       * If renewed on or after the renewal date (overdue), the new supply starts from today.
        */
       const prevSupply = Math.max(istDayDiff(renewed.renewalDate, renewed.orderDate), 1);
       const supplyDays = priced.length ? soonestRenewal(priced) : prevSupply;
-      const graceDays = Math.max(istDayDiff(renewed.expiryDate, renewed.renewalDate), 1);
-      const from = new Date();
+      const graceDays = Math.max(istDayDiff(renewed.expiryDate, renewed.renewalDate), 0);
+      const now = new Date();
+
+      const remainingDays = istDayDiff(renewed.renewalDate, now);
+      const baseDate = remainingDays > 0 ? renewed.renewalDate : now;
+      const newRenewalDate = addDays(baseDate, supplyDays);
+      const newExpiryDate = addDays(newRenewalDate, graceDays);
 
       const rolled = await tx.renewal.update({
         where: { id },
@@ -195,9 +203,9 @@ renewalsRouter.post(
           // Only a single-medicine reorder has one product to point at.
           productId: priced.length === 1 ? (priced[0]?.product?.id ?? null) : null,
           medicineName: priced.map((l) => l.name).join(', '),
-          orderDate: from,
-          renewalDate: addDays(from, supplyDays),
-          expiryDate: addDays(from, supplyDays + graceDays),
+          orderDate: now,
+          renewalDate: newRenewalDate,
+          expiryDate: newExpiryDate,
           // Stays null: the renewal is live, and rolling it forward is not closing it.
           renewedAt: null,
         },

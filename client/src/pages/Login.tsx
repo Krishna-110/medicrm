@@ -5,13 +5,14 @@ import { login } from '@/context/AppContext'
 import { takeFlashMessage } from '@/api/client'
 import { emitToast } from '@/lib/toast'
 import { Button } from '@/components/ui/Button'
-import { ArrowRight, Activity, CheckCircle2, AlertCircle } from 'lucide-react'
+import { ArrowRight, Activity, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react'
 
 export function Login() {
   const { dispatch } = useApp()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -165,14 +166,29 @@ export function Login() {
             </div>
             <div>
               <label className="field-label" htmlFor="login-password">Password</label>
-              <input
-                id="login-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="field-input py-2.5"
-              />
+              <div className="relative">
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="field-input py-2.5 pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-ink-400 hover:text-ink-600 focus:outline-none focus:text-primary-600 transition-colors cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
             <Button type="submit" size="lg" className="w-full" loading={loading === email && !!email}>
               Sign in <ArrowRight className="h-4 w-4" />

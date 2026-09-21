@@ -84,6 +84,9 @@ usersRouter.patch(
     // Reassigning a caller's location is admin-only — a caller cannot move their own stock
     // source. Kept out of EDITABLE, which a caller editing themselves may also write.
     if ('locationId' in body && isAdmin(actor)) data.locationId = body.locationId ?? null;
+    if (typeof body.password === 'string' && body.password.trim().length >= 6 && isAdmin(actor)) {
+      data.passwordHash = await bcrypt.hash(body.password.trim(), 10);
+    }
 
     const user = await prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({ where: { id }, data, include: { location: true } });

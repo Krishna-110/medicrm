@@ -124,6 +124,7 @@ async function main() {
   ]);
 
   const people: [employeeId: string, name: string, email: string, phone: string, role: UserRole, status: UserStatus][] = [
+    ['EMP000', 'Admin', 'admin@gmail.com', '9800000000', UserRole.admin, UserStatus.active],
     ['EMP001', 'Aarav Sharma', 'aarav.sharma@medicrm.in', '9810011111', UserRole.admin, UserStatus.active],
     ['EMP002', 'Priya Mehta', 'priya.mehta@medicrm.in', '9810022222', UserRole.admin, UserStatus.active],
     ['EMP004', 'Sneha Iyer', 'sneha.iyer@medicrm.in', '9812345678', UserRole.caller, UserStatus.active],
@@ -265,7 +266,7 @@ async function main() {
       data: {
         customerId: customer.id, customerName: customer.fullName, orderId: order.id,
         productId: glycomet.id, medicineName: glycomet.brandName!,
-        orderDate: at(-10), renewalDate: at(20), expiryDate: at(26),
+        orderDate: at(-10), renewalDate: at(20), expiryDate: at(20),
         assignedCallerId: sneha, createdBy: admin,
       },
     });

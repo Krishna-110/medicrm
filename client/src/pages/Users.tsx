@@ -10,7 +10,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Plus, Edit2, Trash2, Shield, Phone as PhoneIcon, UserCog } from 'lucide-react'
+import { Plus, Edit2, Trash2, Shield, Phone as PhoneIcon, UserCog, Eye, EyeOff } from 'lucide-react'
 
 const roleBadgeVariant: Record<UserRole, 'warning' | 'info'> = {
   admin: 'warning',
@@ -36,6 +36,9 @@ export function Users() {
   const [showModal, setShowModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [form, setForm] = useState({ name: '', employeeId: '', phone: '', email: '', role: 'caller' as UserRole, password: '', locationId: '' })
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const filtered = state.users.filter(
     (u) =>
@@ -49,17 +52,47 @@ export function Users() {
   function openCreate() {
     setEditingUser(null)
     setForm({ name: '', employeeId: '', phone: '', email: '', role: 'caller', password: '', locationId: '' })
+    setConfirmPassword('')
+    setShowPassword(false)
+    setShowConfirmPassword(false)
     setShowModal(true)
   }
 
   function openEdit(user: User) {
     setEditingUser(user)
     setForm({ name: user.name, employeeId: user.employeeId, phone: user.phone, email: user.email, role: user.role, password: '', locationId: user.locationId ?? '' })
+    setConfirmPassword('')
+    setShowPassword(false)
+    setShowConfirmPassword(false)
     setShowModal(true)
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!editingUser) {
+      if (!form.password) {
+        emitToast('Password is required')
+        return
+      }
+      if (form.password.length < 6) {
+        emitToast('Password must be at least 6 characters')
+        return
+      }
+      if (form.password !== confirmPassword) {
+        emitToast('Passwords do not match')
+        return
+      }
+    } else if (form.password) {
+      if (form.password.length < 6) {
+        emitToast('Password must be at least 6 characters')
+        return
+      }
+      if (form.password !== confirmPassword) {
+        emitToast('Passwords do not match')
+        return
+      }
+    }
+
     // A location only applies to callers; an admin sells from none. Sent as null to clear it,
     // a value to set it.
     const locationId = form.role === 'caller' ? (form.locationId || null) : null
@@ -67,9 +100,11 @@ export function Users() {
       if (editingUser) {
         const user = await usersApi.update(editingUser.id, { ...form, locationId })
         dispatch({ type: 'UPDATE_USER', payload: { id: user.id, updates: user } })
+        emitToast('User updated', 'success')
       } else {
         const user = await usersApi.create({ ...form, locationId })
         dispatch({ type: 'ADD_USER', payload: { user } })
+        emitToast('User created', 'success')
       }
       setShowModal(false)
     } catch (err) {
@@ -242,17 +277,63 @@ export function Users() {
             )}
           </div>
           <div>
-            <label className="field-label" htmlFor="users-editinguser-reset-password-optional-password">{editingUser ? 'Reset Password (optional)' : 'Password'}</label>
-            <input
-              id="users-editinguser-reset-password-optional-password"
-              type="password"
-              required={!editingUser}
-              minLength={6}
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              className="field-input"
-              placeholder={editingUser ? 'Leave blank to keep current password' : 'Minimum 6 characters'}
-            />
+            <label className="field-label" htmlFor="users-password">
+              {editingUser ? 'Reset Password (optional)' : 'Password'}
+            </label>
+            <div className="relative">
+              <input
+                id="users-password"
+                type={showPassword ? 'text' : 'password'}
+                required={!editingUser}
+                minLength={6}
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                className="field-input pr-10"
+                placeholder={editingUser ? 'Leave blank to keep current password' : 'Minimum 6 characters'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-ink-400 hover:text-ink-600 focus:outline-none transition-colors cursor-pointer"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="field-label" htmlFor="users-confirm-password">
+              Confirm Password
+            </label>
+            <div className="relative">
+              <input
+                id="users-confirm-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                required={!editingUser || !!form.password}
+                minLength={6}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={`field-input pr-10 ${
+                  confirmPassword && form.password !== confirmPassword
+                    ? 'border-danger-300 focus:border-danger-500 focus:ring-danger-500/20'
+                    : ''
+                }`}
+                placeholder={editingUser ? 'Re-enter to confirm reset' : 'Re-enter password to confirm'}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-ink-400 hover:text-ink-600 focus:outline-none transition-colors cursor-pointer"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {confirmPassword && form.password !== confirmPassword && (
+              <p className="mt-1 text-xs text-danger-600">Passwords do not match</p>
+            )}
           </div>
           <div className="flex justify-end gap-3 border-t border-ink-100 pt-4">
             <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
