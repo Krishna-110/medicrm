@@ -6,6 +6,10 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  Upload,
+  Trash2,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
 import { ordersApi } from '@/api/orders'
@@ -84,6 +88,7 @@ export function Orders() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [discountForm, setDiscountForm] = useState<{ type: DiscountType; value: string }>({ type: 'none', value: '0' })
   const [savingDiscount, setSavingDiscount] = useState(false)
+  const [uploadingProof, setUploadingProof] = useState(false)
   /*
    * A reversal waiting to be confirmed. Moving an order forward is the ordinary path and goes
    * straight through; moving it BACK undoes work already recorded — an order marked shipped
@@ -234,6 +239,58 @@ export function Orders() {
       emitToast(err instanceof Error ? err.message : 'Failed to apply discount')
     } finally {
       setSavingDiscount(false)
+    }
+  }
+
+  async function handleUploadProof(order: Order, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      emitToast('Image size should be under 5MB')
+      return
+    }
+    setUploadingProof(true)
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      try {
+        const base64 = reader.result as string
+        const updated = await ordersApi.update(order.id, { paymentScreenshot: base64 })
+        dispatch({ type: 'UPDATE_ORDER', payload: { id: updated.id, updates: updated } })
+        if (updated.leadId) {
+          dispatch({
+            type: 'UPDATE_LEAD',
+            payload: { id: updated.leadId, updates: { paymentScreenshot: updated.paymentScreenshot } },
+          })
+        }
+        if (selectedOrder?.id === order.id) setSelectedOrder(updated)
+        emitToast('Payment proof uploaded successfully', 'success')
+      } catch (err) {
+        emitToast(err instanceof Error ? err.message : 'Failed to upload payment proof')
+      } finally {
+        setUploadingProof(false)
+        e.target.value = ''
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleRemoveProof(order: Order) {
+    setUploadingProof(true)
+    try {
+      const updated = await ordersApi.update(order.id, { paymentScreenshot: '' })
+      dispatch({ type: 'UPDATE_ORDER', payload: { id: updated.id, updates: updated } })
+      if (updated.leadId) {
+        dispatch({
+          type: 'UPDATE_LEAD',
+          payload: { id: updated.leadId, updates: { paymentScreenshot: undefined } },
+        })
+      }
+      if (selectedOrder?.id === order.id) setSelectedOrder(updated)
+      emitToast('Payment proof removed', 'success')
+    } catch (err) {
+      emitToast(err instanceof Error ? err.message : 'Failed to remove payment proof')
+    } finally {
+      setUploadingProof(false)
     }
   }
 
@@ -734,31 +791,97 @@ export function Orders() {
             </div>
 
             {/*
-             * Proof of payment. Every conversion and renewal demands one, and until now it was
-             * stored and never shown — evidence collected that nobody could look at.
+             * Proof of payment. Can be uploaded, viewed, replaced, or removed at any time after conversion.
              */}
             <div className="border-t border-ink-200 pt-4">
-              <p className="text-sm font-medium text-ink-700">Payment proof</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-ink-700">Payment proof</p>
+                {selectedOrder.paymentScreenshot && (
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
+                      <Upload size={13} />
+                      <span>Replace</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingProof}
+                        onChange={(e) => handleUploadProof(selectedOrder, e)}
+                        className="hidden"
+                      />
+                    </label>
+                    <span className="text-ink-300">|</span>
+                    <button
+                      type="button"
+                      disabled={uploadingProof}
+                      onClick={() => handleRemoveProof(selectedOrder)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-danger-600 hover:text-danger-700"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {selectedOrder.paymentScreenshot ? (
-                <a
-                  href={selectedOrder.paymentScreenshot}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-block rounded-lg border border-ink-200 p-1 hover:border-primary-400"
-                >
-                  <img
-                    src={selectedOrder.paymentScreenshot}
-                    alt={`Payment proof for ${selectedOrder.orderNumber}`}
-                    className="h-28 max-w-full rounded-md object-contain"
-                  />
-                </a>
+                <div className="mt-2.5 flex items-start gap-4">
+                  <a
+                    href={selectedOrder.paymentScreenshot}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="group relative inline-block rounded-xl border border-ink-200 bg-ink-50/50 p-1.5 transition-all hover:border-primary-400"
+                  >
+                    <img
+                      src={selectedOrder.paymentScreenshot}
+                      alt={`Payment proof for ${selectedOrder.orderNumber}`}
+                      className="h-32 max-w-[280px] rounded-lg object-contain"
+                    />
+                    <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded bg-ink-900/80 px-1.5 py-0.5 text-[10px] text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+                      <ExternalLink size={10} /> View full
+                    </span>
+                  </a>
+                  <div className="space-y-1 text-xs text-ink-500">
+                    <p className="font-medium text-ink-700">Proof attached</p>
+                    <p>Click image to view full size in new tab.</p>
+                    {uploadingProof && (
+                      <p className="flex items-center gap-1 font-medium text-primary-600">
+                        <Loader2 size={12} className="animate-spin" /> Updating...
+                      </p>
+                    )}
+                  </div>
+                </div>
               ) : (
-                <p className="mt-1 text-sm text-ink-400">
-                  None on file — this order predates proof being kept per order.
-                </p>
+                <div className="mt-2">
+                  <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-ink-200 bg-ink-50/40 p-4 text-center cursor-pointer transition-colors hover:border-primary-400 hover:bg-primary-50/20">
+                    {uploadingProof ? (
+                      <div className="flex items-center gap-2 py-2 text-xs font-medium text-primary-600">
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Uploading payment proof...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="mb-1 h-5 w-5 text-ink-400" />
+                        <span className="text-xs font-semibold text-primary-600">
+                          Upload payment proof
+                        </span>
+                        <span className="mt-0.5 text-[11px] text-ink-400">
+                          PNG, JPG, or WEBP up to 5MB
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingProof}
+                          onChange={(e) => handleUploadProof(selectedOrder, e)}
+                          className="hidden"
+                        />
+                      </>
+                    )}
+                  </label>
+                </div>
               )}
+
               {isReorder(selectedOrder) && (
-                <p className="mt-2 text-sm text-ink-600">
+                <p className="mt-3 text-sm text-ink-600">
                   Reorder of{' '}
                   <span className="font-medium text-ink-900">
                     {courseOf(selectedOrder)?.medicineName ?? 'an earlier order'}

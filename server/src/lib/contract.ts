@@ -54,4 +54,4 @@ export type ConvertResponse = { order: ApiOrder; lead: ApiLead | null; renewals:
  * POST /api/renewals/:id/renew — renewing places a repeat order and opens the next cycle.
  * `renewal` is the cycle just closed, `nextRenewal` the one that succeeds it.
  */
-export type RenewResponse = { renewal: ApiRenewal; order: ApiOrder };
+export type RenewResponse = { renewal: ApiRenewal; order: ApiOrder; nextRenewal: ApiRenewal };

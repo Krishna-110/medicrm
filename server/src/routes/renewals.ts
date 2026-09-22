@@ -93,7 +93,7 @@ renewalsRouter.post(
      * actually tracking. The repeat sales remain fully recorded as orders, which is where the
      * money already lives.
      */
-    const { renewal: updated, order } = await prisma.$transaction(async (tx) => {
+    const { renewal: updated, order, next } = await prisma.$transaction(async (tx) => {
       const renewed = await tx.renewal.findUniqueOrThrow({
         where: { id },
         include: RENEWAL_CONTACT,
@@ -195,22 +195,33 @@ renewalsRouter.post(
       const newRenewalDate = addDays(baseDate, supplyDays);
       const newExpiryDate = addDays(newRenewalDate, graceDays);
 
-      const rolled = await tx.renewal.update({
+      // Stamp the current renewal as renewed (completed cycle)
+      const closed = await tx.renewal.update({
         where: { id },
         data: {
-          // Points at the order just placed — that is what this renewal is now a renewal of.
+          renewedAt: now,
+        },
+        include: RENEWAL_CONTACT,
+      });
+
+      // The next cycle describes the reorder just placed, carrying the customer forward
+      const nextCycle = await tx.renewal.create({
+        data: {
+          customerId: renewed.customerId,
+          customerName: renewed.customerName,
           orderId: created.id,
-          // Only a single-medicine reorder has one product to point at.
           productId: priced.length === 1 ? (priced[0]?.product?.id ?? null) : null,
           medicineName: priced.map((l) => l.name).join(', '),
           orderDate: now,
           renewalDate: newRenewalDate,
           expiryDate: newExpiryDate,
-          // Stays null: the renewal is live, and rolling it forward is not closing it.
-          renewedAt: null,
+          assignedCallerId: renewed.assignedCallerId,
+          previousRenewalId: renewed.id,
+          createdBy: actorOf(req).userId,
         },
         include: RENEWAL_CONTACT,
       });
+
       // Mark any existing reminder follow-up for this cycle completed
       await tx.followUp.updateMany({
         where: { renewalId: id, status: 'pending', deletedAt: null },
@@ -224,11 +235,14 @@ renewalsRouter.post(
         where: { id: created.id },
         include: { items: { orderBy: { createdAt: 'asc' } }, ...ORDER_CALLER },
       });
-      return { renewal: rolled, order: withItems };
+      return { renewal: closed, order: withItems, next: nextCycle };
     });
 
-    // One renewal, rolled forward, plus the order it placed. There is no successor to report.
-    res.json({ renewal: serializeRenewal(updated), order: serializeOrder(order) });
+    res.json({
+      renewal: serializeRenewal(updated),
+      order: serializeOrder(order),
+      nextRenewal: serializeRenewal(next),
+    });
   }),
 );
 

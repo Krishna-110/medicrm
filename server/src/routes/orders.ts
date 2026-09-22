@@ -48,10 +48,19 @@ ordersRouter.patch(
     if ('paymentStatus' in body) data.paymentStatus = body.paymentStatus;
     if ('discountType' in body) data.discountType = body.discountType;
     if ('discountValue' in body) data.discountValue = Number(body.discountValue) || 0;
+    if ('paymentScreenshot' in body) {
+      data.paymentScreenshot = body.paymentScreenshot ? String(body.paymentScreenshot).trim() : null;
+    }
     if (Object.keys(data).length === 0) throw ApiError.badRequest('no updatable fields provided');
 
     const order = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({ where: { id }, data });
+      if (before.leadId && 'paymentScreenshot' in data) {
+        await tx.lead.update({
+          where: { id: before.leadId },
+          data: { paymentScreenshot: data.paymentScreenshot as string | null },
+        });
+      }
       // A discount change moves the payable amount, so the totals are rebuilt rather than
       // patched — the same recomputation any line-item change triggers.
       if ('discountType' in body || 'discountValue' in body) {

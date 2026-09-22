@@ -270,6 +270,13 @@ leadsRouter.patch(
     const lead = await prisma.$transaction(async (tx) => {
       const updated = await tx.lead.update({ where: { id: before.id }, data });
 
+      if ('paymentScreenshot' in body) {
+        await tx.order.updateMany({
+          where: { leadId: updated.id },
+          data: { paymentScreenshot: (data.paymentScreenshot as string | null) ?? null },
+        });
+      }
+
       if ('assignedCaller' in body && before.assignedCallerId !== updated.assignedCallerId) {
         await recordAssignment(tx, actor, updated.id, before.assignedCallerId, updated.assignedCallerId);
         await recountAssignedLeads(

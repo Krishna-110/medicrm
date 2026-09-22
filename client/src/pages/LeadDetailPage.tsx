@@ -25,6 +25,10 @@ import {
   CalendarPlus,
   AlertCircle,
   Pill,
+  Upload,
+  Trash2,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react'
 
 const activityIconMap: Record<LeadActivity['type'], typeof Phone> = {
@@ -76,6 +80,7 @@ export function LeadDetailPage() {
   const [showMedicineFields, setShowMedicineFields] = useState(false)
   const [medicineName, setMedicineName] = useState('')
   const [medicineDays, setMedicineDays] = useState('30')
+  const [uploadingProof, setUploadingProof] = useState(false)
 
   const lead = state.leads.find(l => l.id === id)
 
@@ -144,6 +149,60 @@ export function LeadDetailPage() {
       dispatch({ type: 'UPDATE_LEAD', payload: { id: updated.id, updates: updated } })
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to update status')
+    }
+  }
+
+  async function handleUploadProof(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!lead) return
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      emitToast('Image size should be under 5MB')
+      return
+    }
+    setUploadingProof(true)
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      try {
+        const base64 = reader.result as string
+        const updated = await leadsApi.update(lead.id, { paymentScreenshot: base64 })
+        dispatch({ type: 'UPDATE_LEAD', payload: { id: updated.id, updates: updated } })
+        const relatedOrder = state.orders.find((o) => o.leadId === updated.id)
+        if (relatedOrder) {
+          dispatch({
+            type: 'UPDATE_ORDER',
+            payload: { id: relatedOrder.id, updates: { paymentScreenshot: updated.paymentScreenshot } },
+          })
+        }
+        emitToast('Payment proof uploaded successfully', 'success')
+      } catch (err) {
+        emitToast(err instanceof Error ? err.message : 'Failed to upload payment proof')
+      } finally {
+        setUploadingProof(false)
+        e.target.value = ''
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleRemoveProof() {
+    if (!lead) return
+    setUploadingProof(true)
+    try {
+      const updated = await leadsApi.update(lead.id, { paymentScreenshot: '' })
+      dispatch({ type: 'UPDATE_LEAD', payload: { id: updated.id, updates: updated } })
+      const relatedOrder = state.orders.find((o) => o.leadId === updated.id)
+      if (relatedOrder) {
+        dispatch({
+          type: 'UPDATE_ORDER',
+          payload: { id: relatedOrder.id, updates: { paymentScreenshot: undefined } },
+        })
+      }
+      emitToast('Payment proof removed', 'success')
+    } catch (err) {
+      emitToast(err instanceof Error ? err.message : 'Failed to remove payment proof')
+    } finally {
+      setUploadingProof(false)
     }
   }
 
@@ -272,20 +331,85 @@ export function LeadDetailPage() {
             </CardBody>
           </Card>
 
-          {/* Payment Screenshot Card if available */}
-          {lead.paymentScreenshot && (
+          {/* Payment Screenshot Card */}
+          {(lead.status === 'converted' || lead.paymentScreenshot) && (
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <h2 className="text-[15px] font-semibold text-ink-900">Payment Screenshot</h2>
+                {lead.paymentScreenshot && (
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700">
+                      <Upload size={13} />
+                      <span>Replace</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingProof}
+                        onChange={handleUploadProof}
+                        className="hidden"
+                      />
+                    </label>
+                    <span className="text-ink-300">|</span>
+                    <button
+                      type="button"
+                      disabled={uploadingProof}
+                      onClick={handleRemoveProof}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-danger-600 hover:text-danger-700"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+                )}
               </CardHeader>
               <CardBody>
-                <div className="overflow-hidden rounded-xl border border-ink-200 bg-ink-50/50 p-2 max-w-sm">
-                  <img
-                    src={lead.paymentScreenshot}
-                    alt="Payment Confirmation Screenshot"
-                    className="max-h-64 rounded-lg object-contain w-full"
-                  />
-                </div>
+                {lead.paymentScreenshot ? (
+                  <div className="space-y-2">
+                    <div className="overflow-hidden rounded-xl border border-ink-200 bg-ink-50/50 p-2 max-w-sm">
+                      <a href={lead.paymentScreenshot} target="_blank" rel="noreferrer" className="group relative block">
+                        <img
+                          src={lead.paymentScreenshot}
+                          alt="Payment Confirmation Screenshot"
+                          className="max-h-64 rounded-lg object-contain w-full"
+                        />
+                        <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded bg-ink-900/80 px-1.5 py-0.5 text-[10px] text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+                          <ExternalLink size={10} /> View full
+                        </span>
+                      </a>
+                    </div>
+                    {uploadingProof && (
+                      <p className="flex items-center gap-1 text-xs font-medium text-primary-600">
+                        <Loader2 size={12} className="animate-spin" /> Updating...
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-ink-200 bg-ink-50/40 p-5 text-center cursor-pointer transition-colors hover:border-primary-400 hover:bg-primary-50/20 max-w-sm">
+                    {uploadingProof ? (
+                      <div className="flex items-center gap-2 py-2 text-xs font-medium text-primary-600">
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Uploading payment proof...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="mb-1 h-6 w-6 text-ink-400" />
+                        <span className="text-xs font-semibold text-primary-600">
+                          Upload payment proof
+                        </span>
+                        <span className="mt-0.5 text-[11px] text-ink-400">
+                          PNG, JPG, or WEBP up to 5MB
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingProof}
+                          onChange={handleUploadProof}
+                          className="hidden"
+                        />
+                      </>
+                    )}
+                  </label>
+                )}
               </CardBody>
             </Card>
           )}

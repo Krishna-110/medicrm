@@ -63,7 +63,8 @@ export function Renewals() {
   }
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: renewals.length }
+    const activeRenewals = renewals.filter((r) => r.status !== 'renewed')
+    const counts: Record<string, number> = { all: activeRenewals.length }
     for (const r of renewals) {
       counts[r.status] = (counts[r.status] ?? 0) + 1
     }
@@ -72,9 +73,14 @@ export function Renewals() {
 
   const filteredRenewals = useMemo(() => {
     let result = renewals
-    if (activeTab !== 'all') {
+    if (activeTab === 'all') {
+      // The "All" tab only shows active renewals (upcoming, due today, overdue).
+      // Completed / renewed rows are moved exclusively to the "Renewed" tab.
+      result = result.filter((r) => r.status !== 'renewed')
+    } else {
       result = result.filter((r) => r.status === activeTab)
     }
+
     if (search.trim()) {
       const q = search.toLowerCase()
       result = result.filter(
@@ -84,7 +90,8 @@ export function Renewals() {
           (r.assignedCaller && r.assignedCaller.toLowerCase().includes(q)),
       )
     }
-    return result
+
+    return [...result].sort((a, b) => a.renewalDate.localeCompare(b.renewalDate))
   }, [renewals, activeTab, search])
 
   const tabs = [
@@ -95,12 +102,13 @@ export function Renewals() {
     { id: 'renewed', label: 'Renewed', count: statusCounts.renewed ?? 0 },
   ]
 
-  // Renewing rolls the same renewal forward and places a repeat order, so there are exactly
-  // two things to record: the moved row and the new order. No successor is created, so the
-  // list keeps one row per customer's course with its date advanced.
-  function handleRenewed({ renewal, order }: RenewResponse) {
+  // Renewing marks the current cycle as renewed and opens the next upcoming cycle.
+  function handleRenewed({ renewal, order, nextRenewal }: RenewResponse) {
     dispatch({ type: 'UPDATE_RENEWAL', payload: { id: renewal.id, updates: renewal } })
     dispatch({ type: 'ADD_ORDER', payload: { order } })
+    if (nextRenewal) {
+      dispatch({ type: 'ADD_RENEWAL', payload: { renewal: nextRenewal } })
+    }
     const existing = state.followUps.find(f => f.renewalId === renewal.id && f.status === 'pending')
     if (existing) {
       dispatch({ type: 'UPDATE_FOLLOW_UP', payload: { id: existing.id, updates: { status: 'completed' } } })
@@ -160,7 +168,10 @@ export function Renewals() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Renewals" description={`${renewals.length} total renewals`} />
+      <PageHeader
+        title="Renewals"
+        description={`${statusCounts.all} active renewals${statusCounts.renewed ? ` · ${statusCounts.renewed} renewed` : ''}`}
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -211,13 +222,15 @@ export function Renewals() {
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Days Left</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Caller</th>
                 <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Status</th>
-                <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">Actions</th>
+                <th className="px-3 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+                  {activeTab === 'renewed' ? 'Renewed Date' : 'Actions'}
+                </th>
               </tr>
             </thead>
             <tbody>
               {filteredRenewals.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={8}>
                     <EmptyState
                       icon={<CalendarClock size={26} />}
                       title="No renewals found"
@@ -238,54 +251,55 @@ export function Renewals() {
                         {formatIndianDate(renewal.renewalDate)}
                       </td>
                       <td className="px-3 py-3.5">
-                        <span
-                          className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${getDaysRemainingPill(renewal.daysRemaining)}`}
-                        >
-                          {renewal.daysRemaining}
-                        </span>
+                        {renewal.status === 'renewed' ? (
+                          <span className="inline-flex items-center justify-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            Renewed
+                          </span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${getDaysRemainingPill(renewal.daysRemaining)}`}
+                          >
+                            {renewal.daysRemaining}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-3.5 text-ink-600">{callerName(renewal.assignedCaller)}</td>
                       <td className="px-3 py-3.5">
                         <RenewalStatusBadge status={renewal.status} />
                       </td>
-                      <td className="px-3 py-3.5">
-                        {/*
-                         * Only actions that do something. "Call customer" and "View details"
-                         * were buttons with no onClick at all — they rendered, they hovered,
-                         * they did nothing. Renew and Cancel now hide once a cycle is renewed:
-                         * the server refuses both because renewedAt is set, so showing them was
-                         * an invitation to click and be told the renewal was not found.
-                         */}
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            title="Schedule reminder"
-                            onClick={() => openReminder(renewal)}
-                            className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
-                          >
-                            <CalendarPlus className="h-4 w-4" />
-                          </button>
-                          {renewal.status !== 'renewed' && (
-                            <>
-                              <button
-                                type="button"
-                                title="Renew order"
-                                onClick={() => setRenewingRenewal(renewal)}
-                                className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
-                              >
-                                <RefreshCw className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                title="Stop / Cancel renewal"
-                                onClick={() => setCancelingRenewal(renewal)}
-                                className="rounded-lg p-1.5 text-danger-500 hover:bg-danger-50 hover:text-danger-600 transition-colors"
-                              >
-                                <XCircle className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
+                      <td className="px-3 py-3.5 whitespace-nowrap">
+                        {renewal.status !== 'renewed' ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              title="Schedule reminder"
+                              onClick={() => openReminder(renewal)}
+                              className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
+                            >
+                              <CalendarPlus className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Renew order"
+                              onClick={() => setRenewingRenewal(renewal)}
+                              className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100 hover:text-ink-700 transition-colors"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Stop / Cancel renewal"
+                              onClick={() => setCancelingRenewal(renewal)}
+                              className="rounded-lg p-1.5 text-danger-500 hover:bg-danger-50 hover:text-danger-600 transition-colors"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold text-emerald-700 bg-emerald-50 rounded-md">
+                            {renewal.renewedDate ? formatIndianDate(renewal.renewedDate) : '—'}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
@@ -335,8 +349,7 @@ export function Renewals() {
               {FOLLOW_UP_SLOTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
             <p className="mt-1.5 text-xs text-ink-400">
-              Defaults to the renewal date. Setting a reminder again moves this one rather than
-              adding a second.
+              Pre-filled with the renewal date. Click &quot;Set reminder&quot; to save or customize the reminder date and time slot.
             </p>
           </div>
           <div className="flex justify-end gap-3 border-t border-ink-100 pt-3">

@@ -228,7 +228,8 @@ export const serializeRenewal = (r: Renewal) => ({
   orderDate: d10(r.orderDate),
   renewalDate: d10(r.renewalDate),
   expiryDate: d10(r.expiryDate),
-  daysRemaining: daysRemaining(r.renewalDate),
+  renewedDate: d10(r.renewedAt) || undefined,
+  daysRemaining: daysRemaining(r.renewalDate, r.renewedAt),
   assignedCaller: r.assignedCallerId ?? undefined,
   // The order this cycle belongs to, and whether it descends from an earlier one. Together
   // they are what lets a payment be traced back to the renewal that produced it: an order
@@ -248,6 +249,7 @@ export const serializeRenewal = (r: Renewal) => ({
 export const FOLLOW_UP_CONTACT = {
   lead: { select: { mobile: true } },
   customer: { select: { primaryMobile: true } },
+  renewal: { select: { medicineName: true, renewalDate: true } },
 } as const;
 
 type FollowUp = {
@@ -255,6 +257,7 @@ type FollowUp = {
   scheduledAt: Date; type: string; status: string; notes: string | null; slot: string | null;
   lead?: { mobile: string } | null;
   customer?: { primaryMobile: string } | null;
+  renewal?: { medicineName: string; renewalDate: Date } | null;
 };
 export const serializeFollowUp = (f: FollowUp) => ({
   id: f.id,
@@ -262,6 +265,8 @@ export const serializeFollowUp = (f: FollowUp) => ({
   // Which renewal this reminder belongs to. Without it the client cannot tell that a renewal
   // already has a reminder, so the dialog could only ever offer the renewal date back.
   renewalId: f.renewalId ?? undefined,
+  medicineName: f.renewal?.medicineName ?? undefined,
+  renewalDate: f.renewal?.renewalDate ? d10(f.renewal.renewalDate) : undefined,
   // The number to ring. The lead's is preferred — that is the copy a caller has been editing
   // — with the customer record standing in for a renewal reminder, which has no lead.
   mobile: f.lead?.mobile ?? f.customer?.primaryMobile ?? undefined,

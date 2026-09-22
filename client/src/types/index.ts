@@ -139,6 +139,7 @@ export type Renewal = {
   orderDate: string;
   renewalDate: string;
   expiryDate: string;
+  renewedDate?: string;
   daysRemaining: number;
   assignedCaller?: string;
   status: RenewalStatus;
@@ -151,6 +152,8 @@ export type FollowUp = {
   leadId?: string;
   /** Set when this is a renewal reminder; lets the renewal find its own pending one. */
   renewalId?: string;
+  medicineName?: string;
+  renewalDate?: string;
   customerName: string;
   /** The number to ring — the lead's, or the customer record's for a renewal reminder. */
   mobile?: string;
@@ -175,8 +178,10 @@ export type DashboardStats = {
   totalLeads: number;
   /** Calls completed today, by when they were made — not by when they were scheduled. */
   callsDoneToday: number;
-  /** Follow-up records still pending — not leads sitting in a follow_up_pending status. */
+  /** Follow-up records still pending (leads only) */
   pendingFollowUps: number;
+  /** Renewal reminders still pending */
+  renewalReminders: number;
   /** Every order, reorders from renewals included; the card is labelled Total Orders. */
   totalOrders: number;
   renewalsDue: number;

@@ -52,9 +52,9 @@ export function renewalStatus(
   return 'upcoming';
 }
 
-/** Days until expiry, negative once overdue. */
-export const daysRemaining = (expiryDate: Date, now = new Date()): number =>
-  istDayDiff(expiryDate, now);
+/** Days until expiry, negative once overdue. 0 once renewed so it never counts down into red negatives. */
+export const daysRemaining = (expiryDate: Date, renewedAt?: Date | null, now = new Date()): number =>
+  renewedAt ? 0 : istDayDiff(expiryDate, now);
 
 /** IST day/week/month boundaries for the dashboard, as instants. */
 export function periodBoundaries(now = new Date()) {
