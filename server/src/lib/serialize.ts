@@ -255,6 +255,7 @@ export const FOLLOW_UP_CONTACT = {
 type FollowUp = {
   id: string; leadId: string | null; renewalId: string | null; customerName: string;
   scheduledAt: Date; type: string; status: string; notes: string | null; slot: string | null;
+  completedAt?: Date | null;
   lead?: { mobile: string } | null;
   customer?: { primaryMobile: string } | null;
   renewal?: { medicineName: string; renewalDate: Date } | null;
@@ -272,6 +273,8 @@ export const serializeFollowUp = (f: FollowUp) => ({
   mobile: f.lead?.mobile ?? f.customer?.primaryMobile ?? undefined,
   customerName: f.customerName,
   scheduledDate: d10(f.scheduledAt),
+  completedDate: d10(f.completedAt) || undefined,
+  completedAt: f.completedAt ? f.completedAt.toISOString() : undefined,
   // The part of the day agreed with the customer; absent on anything scheduled before slots
   // existed, and on a call nobody pinned to one.
   slot: (f.slot ?? undefined) as FollowUpSlot | undefined,

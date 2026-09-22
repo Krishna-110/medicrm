@@ -159,8 +159,13 @@ export function Calendar() {
   const followUpsByDate = useMemo(() => {
     const map: Record<string, FollowUp[]> = {}
     for (const f of state.followUps) {
-      if (!map[f.scheduledDate]) map[f.scheduledDate] = []
-      map[f.scheduledDate].push(f)
+      // Completed calls belong on the day they were completed (completedDate),
+      // so completed calls show up on the day the caller worked them.
+      // Pending/missed calls remain on their scheduledDate.
+      const dateKey = f.status === 'completed' && f.completedDate ? f.completedDate : f.scheduledDate
+      if (!dateKey) continue
+      if (!map[dateKey]) map[dateKey] = []
+      map[dateKey].push(f)
     }
     return map
   }, [state.followUps])
@@ -311,6 +316,13 @@ export function Calendar() {
             <span className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-600">
               <Clock className="h-3 w-3" />
               {slotLabel(f.slot)}
+            </span>
+          )}
+          {f.status === 'completed' && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700">
+              <CheckCircle2 className="h-3 w-3" />
+              Done {f.completedDate ? formatIndianDate(f.completedDate) : 'today'}
+              {f.completedDate && f.scheduledDate !== f.completedDate && ` (sch. ${formatIndianDate(f.scheduledDate)})`}
             </span>
           )}
         </div>
@@ -681,7 +693,19 @@ export function Calendar() {
                         {f.notes && (
                           <p className="text-sm text-ink-500">{f.notes}</p>
                         )}
-                        <p className="text-xs text-ink-400">Scheduled: {formatIndianDate(f.scheduledDate)}</p>
+                        {f.status === 'completed' ? (
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="inline-flex items-center gap-1 font-medium text-teal-700">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Completed {f.completedDate ? formatIndianDate(f.completedDate) : 'today'}
+                            </span>
+                            {f.completedDate && f.scheduledDate !== f.completedDate && (
+                              <span className="text-ink-400">· Scheduled {formatIndianDate(f.scheduledDate)}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-ink-400">Scheduled: {formatIndianDate(f.scheduledDate)}</p>
+                        )}
                       </div>
                     </div>
                     {(f.mobile || f.status !== 'completed') && (

@@ -158,6 +158,8 @@ export type FollowUp = {
   /** The number to ring — the lead's, or the customer record's for a renewal reminder. */
   mobile?: string;
   scheduledDate: string;
+  completedDate?: string;
+  completedAt?: string;
   /** The part of the day agreed with the customer; absent when none was. */
   slot?: FollowUpSlot;
   type: 'call' | 'reminder' | 'callback';

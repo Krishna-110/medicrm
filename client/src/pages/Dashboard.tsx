@@ -12,6 +12,7 @@ import {
   CalendarRange,
   IndianRupee,
   BarChart3,
+  CheckCircle2,
 } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
 import { Card } from '@/components/ui/Card'
@@ -24,7 +25,7 @@ import { followUpsApi } from '@/api/followUps'
 import { renewalsApi } from '@/api/renewals'
 import { miscApi } from '@/api/misc'
 import { emitToast } from '@/lib/toast'
-import { formatIndianDate, istToday, istWeekStart } from '@/lib/dateUtils'
+import { formatIndianDate, formatIndianDateTime, formatIndianTime, istToday, istWeekStart } from '@/lib/dateUtils'
 import type { Lead, LeadStatus } from '@/types'
 
 function formatRupees(amount: number) {
@@ -101,6 +102,8 @@ export function Dashboard() {
   const navigate = useNavigate()
   const [showCustomers, setShowCustomers] = useState(false)
   const [showRenewalReminders, setShowRenewalReminders] = useState(false)
+  const [showCallsDoneToday, setShowCallsDoneToday] = useState(false)
+  const [completedCallsFilter, setCompletedCallsFilter] = useState<'today' | 'all'>('today')
 
   const dashboard = state.dashboard
 
@@ -235,6 +238,25 @@ export function Dashboard() {
       .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
   }, [renewalRemindersList])
 
+  // All completed follow-ups and reminder calls
+  const completedCallsAll = useMemo(() => {
+    return state.followUps
+      .filter((f) => f.status === 'completed')
+      .sort((a, b) => {
+        const timeA = a.completedAt || a.completedDate || a.scheduledDate
+        const timeB = b.completedAt || b.completedDate || b.scheduledDate
+        return timeB.localeCompare(timeA)
+      })
+  }, [state.followUps])
+
+  // Completed calls made today (based on completedDate or completedAt in IST)
+  const completedCallsToday = useMemo(() => {
+    const today = istToday()
+    return completedCallsAll.filter(
+      (f) => f.completedDate === today || (!f.completedDate && f.scheduledDate === today),
+    )
+  }, [completedCallsAll])
+
   async function completeTask(id: string) {
     try {
       if (id.startsWith('ren-')) {
@@ -296,7 +318,16 @@ export function Dashboard() {
   const statCards: StatCard[] = [
     { label: 'Total Leads', value: dashboard?.totalLeads ?? 0, icon: Users, tint: 'from-primary-500 to-primary-600', onClick: () => navigate('/leads') },
     { label: 'Total Customers', value: customers.length, icon: UserCheck, tint: 'from-emerald-500 to-emerald-600', onClick: () => setShowCustomers(true) },
-    { label: 'Calls Done Today', value: dashboard?.callsDoneToday ?? 0, icon: Phone, tint: 'from-teal-500 to-teal-600' },
+    {
+      label: 'Calls Done Today',
+      value: dashboard?.callsDoneToday ?? completedCallsToday.length,
+      icon: Phone,
+      tint: 'from-teal-500 to-teal-600',
+      onClick: () => {
+        setCompletedCallsFilter('today')
+        setShowCallsDoneToday(true)
+      },
+    },
     { label: 'Pending Follow-ups', value: dashboard?.pendingFollowUps ?? leadFollowUps.length, icon: Clock, tint: 'from-warning-500 to-warning-600' },
     { label: 'Renewal Reminders', value: dashboard?.renewalReminders ?? renewalRemindersList.length, icon: CalendarClock, tint: 'from-amber-500 to-amber-600', onClick: () => setShowRenewalReminders(true) },
     { label: 'Total Orders', value: dashboard?.totalOrders ?? 0, icon: ShoppingCart, tint: 'from-success-500 to-success-600', onClick: () => navigate('/orders') },
@@ -826,6 +857,169 @@ export function Dashboard() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Calls Completed Modal — details behind Calls Done Today stat card */}
+      <Modal
+        isOpen={showCallsDoneToday}
+        onClose={() => setShowCallsDoneToday(false)}
+        title={completedCallsFilter === 'today' ? 'Calls Completed Today' : 'All Completed Calls'}
+        description={
+          completedCallsFilter === 'today'
+            ? `${completedCallsToday.length} call${completedCallsToday.length === 1 ? '' : 's'} completed today`
+            : `${completedCallsAll.length} total completed call${completedCallsAll.length === 1 ? '' : 's'}`
+        }
+        size="xl"
+      >
+        <div className="space-y-4">
+          {/* Toggle between Today and All */}
+          <div className="flex items-center justify-between border-b border-ink-100 pb-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCompletedCallsFilter('today')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  completedCallsFilter === 'today'
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
+                }`}
+              >
+                Today ({completedCallsToday.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setCompletedCallsFilter('all')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  completedCallsFilter === 'all'
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
+                }`}
+              >
+                All Completed ({completedCallsAll.length})
+              </button>
+            </div>
+            <span className="text-xs text-ink-400">
+              {completedCallsFilter === 'today'
+                ? 'Calls marked done today'
+                : 'History of all completed calls'}
+            </span>
+          </div>
+
+          {(() => {
+            const list = completedCallsFilter === 'today' ? completedCallsToday : completedCallsAll
+            if (list.length === 0) {
+              return (
+                <div className="py-8 text-center text-sm text-ink-400">
+                  <p>
+                    {completedCallsFilter === 'today'
+                      ? 'No calls marked as completed today yet.'
+                      : 'No completed calls found.'}
+                  </p>
+                </div>
+              )
+            }
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-ink-100 bg-ink-50/50">
+                      {['Customer', 'Type', 'Mobile', 'Scheduled', 'Completed', 'Notes', 'Action'].map((h, i) => (
+                        <th
+                          key={h}
+                          className={`whitespace-nowrap py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400 ${
+                            i === 0 ? 'pl-1 pr-3' : 'px-3'
+                          }`}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((c) => {
+                      const isRenewal = !!c.renewalId
+                      const medicine = c.medicineName
+                      const completedDisplay = c.completedAt
+                        ? formatIndianDateTime(c.completedAt)
+                        : c.completedDate
+                        ? formatIndianDate(c.completedDate)
+                        : formatIndianDate(c.scheduledDate)
+
+                      return (
+                        <tr key={c.id} className="border-b border-ink-50 last:border-0 hover:bg-ink-50/30">
+                          <td className="py-3 pl-1 pr-3 font-medium text-ink-900">
+                            <div>{c.customerName}</div>
+                            {medicine && (
+                              <span className="mt-0.5 inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                                {medicine}
+                              </span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3">
+                            {isRenewal ? (
+                              <Badge variant="warning">Renewal</Badge>
+                            ) : (
+                              <Badge variant="info">Lead Follow-up</Badge>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-ink-600">
+                            {c.mobile ? (
+                              <a href={`tel:${c.mobile}`} className="font-medium text-primary-600 hover:underline">
+                                {c.mobile}
+                              </a>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-ink-600">
+                            {formatIndianDate(c.scheduledDate)}
+                            {c.slot && <span className="ml-1 text-xs text-ink-400">({c.slot})</span>}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 font-medium text-teal-700">
+                            <span className="inline-flex items-center gap-1 rounded bg-teal-50 px-2 py-0.5 text-xs">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {completedDisplay}
+                            </span>
+                          </td>
+                          <td className="max-w-[180px] truncate px-3 py-3 text-xs text-ink-500" title={c.notes || ''}>
+                            {c.notes || '—'}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3">
+                            {c.leadId ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setShowCallsDoneToday(false)
+                                  navigate(`/leads/${c.leadId}`)
+                                }}
+                              >
+                                View Lead →
+                              </Button>
+                            ) : c.renewalId ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setShowCallsDoneToday(false)
+                                  navigate('/renewals')
+                                }}
+                              >
+                                View Renewals →
+                              </Button>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
+        </div>
       </Modal>
     </div>
   )
