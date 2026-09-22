@@ -33,7 +33,6 @@ const DISCOUNT_LABEL: Record<DiscountType, string> = {
 }
 
 const STAGES: { key: OrderStage; label: string; dot: string; accent: string }[] = [
-  { key: 'lead', label: 'Lead', dot: 'bg-ink-400', accent: 'bg-ink-400' },
   { key: 'confirmed', label: 'Confirmed', dot: 'bg-primary-500', accent: 'bg-primary-500' },
   { key: 'medicine_prepared', label: 'Medicine Prepared', dot: 'bg-sky-500', accent: 'bg-sky-500' },
   { key: 'packed', label: 'Packed', dot: 'bg-warning-500', accent: 'bg-warning-500' },
@@ -41,7 +40,7 @@ const STAGES: { key: OrderStage; label: string; dot: string; accent: string }[] 
   { key: 'delivered', label: 'Delivered', dot: 'bg-success-500', accent: 'bg-success-500' },
 ]
 
-const STAGE_ORDER: OrderStage[] = ['lead', 'confirmed', 'medicine_prepared', 'packed', 'shipped', 'delivered']
+const STAGE_ORDER: OrderStage[] = ['confirmed', 'medicine_prepared', 'packed', 'shipped', 'delivered']
 
 function formatIndianCurrency(amount: number): string {
   const formatted = amount.toLocaleString('en-IN', {
@@ -99,15 +98,6 @@ export function Orders() {
 
   const orders = state.orders ?? []
 
-  /*
-   * Whether this order was a repeat purchase, worked out from the customer's own orders.
-   *
-   * It used to look for a renewal pointing at this order that had a predecessor, which only
-   * held while renewing created a new renewal each time. A renewal now rolls forward, so its
-   * orderId names the LATEST reorder only and every earlier one would have read as a first
-   * sale. The orders themselves answer it without ambiguity: anything after a customer's first
-   * is a reorder, whatever produced it.
-   */
   const isReorder = (order: Order) =>
     orders.some(
       o =>
@@ -120,6 +110,7 @@ export function Orders() {
   /** The renewal this customer's course is on, for naming the medicine on a reorder. */
   const courseOf = (order: Order) =>
     (state.renewals ?? []).find(r => r.customerId === order.customerId)
+
 
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = { all: orders.length }
@@ -304,7 +295,7 @@ export function Orders() {
       <PageHeader title="Orders" description={`${orders.length} total orders`} />
 
       {/* Pipeline */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {STAGES.map((stage) => {
           const count = stageCounts[stage.key] ?? 0
           const isActive = activeTab === stage.key
@@ -878,22 +869,6 @@ export function Orders() {
                     )}
                   </label>
                 </div>
-              )}
-
-              {isReorder(selectedOrder) && (
-                <p className="mt-3 text-sm text-ink-600">
-                  Reorder of{' '}
-                  <span className="font-medium text-ink-900">
-                    {courseOf(selectedOrder)?.medicineName ?? 'an earlier order'}
-                  </span>.{' '}
-                  <button
-                    type="button"
-                    onClick={() => navigate('/renewals')}
-                    className="font-medium text-primary-600 hover:text-primary-700"
-                  >
-                    View renewals
-                  </button>
-                </p>
               )}
             </div>
 
