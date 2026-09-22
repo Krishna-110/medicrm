@@ -192,9 +192,14 @@ export function Dashboard() {
     return { today: inToday, thisWeek: inWeek, thisMonth: inMonth }
   }, [state.customers])
 
-  // Pending lead follow-ups only (renewal reminders separated to avoid confusion)
-  const leadFollowUps = useMemo(() => {
-    return state.followUps.filter((f) => !f.renewalId && f.status === 'pending')
+  // Follow-ups are already loaded and already scoped to the signed-in caller, so "my tasks"
+  // is a filter, not a fetch. Overdue first: yesterday's missed call matters more than a
+  // call due at 5pm.
+  const myTasks = useMemo(() => {
+    const today = istToday()
+    return state.followUps
+      .filter((f) => f.status === 'pending' && f.scheduledDate <= today)
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
   }, [state.followUps])
 
   // Active renewal reminders:
@@ -221,22 +226,6 @@ export function Dashboard() {
     })
   }, [state.renewals, state.followUps])
 
-  // Lead follow-up tasks due today or overdue
-  const myLeadTasks = useMemo(() => {
-    const today = istToday()
-    return leadFollowUps
-      .filter((f) => f.scheduledDate <= today)
-      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
-  }, [leadFollowUps])
-
-  // Renewal reminder tasks due today or overdue
-  const myRenewalTasks = useMemo(() => {
-    const today = istToday()
-    return renewalRemindersList
-      .filter((f) => f.scheduledDate <= today)
-      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
-  }, [renewalRemindersList])
-
   // Calls completed today (based on completedDate or completedAt in IST)
   const completedCallsToday = useMemo(() => {
     const today = istToday()
@@ -255,22 +244,9 @@ export function Dashboard() {
 
   async function completeTask(id: string) {
     try {
-      if (id.startsWith('ren-')) {
-        const renewalId = id.replace('ren-', '')
-        const renewal = state.renewals.find((r) => r.id === renewalId)
-        if (renewal) {
-          const followUp = await renewalsApi.remind(renewal.id, {
-            scheduledDate: istToday(),
-            notes: `Reminder call for ${renewal.medicineName}`,
-          })
-          const { followUp: completed } = await followUpsApi.updateStatus(followUp.id, 'completed')
-          dispatch({ type: 'UPDATE_FOLLOW_UP', payload: { id: completed.id, updates: completed } })
-        }
-      } else {
-        const { followUp, lead } = await followUpsApi.updateStatus(id, 'completed')
-        dispatch({ type: 'UPDATE_FOLLOW_UP', payload: { id: followUp.id, updates: followUp } })
-        if (lead) dispatch({ type: 'UPDATE_LEAD', payload: { id: lead.id, updates: lead } })
-      }
+      const { followUp, lead } = await followUpsApi.updateStatus(id, 'completed')
+      dispatch({ type: 'UPDATE_FOLLOW_UP', payload: { id: followUp.id, updates: followUp } })
+      if (lead) dispatch({ type: 'UPDATE_LEAD', payload: { id: lead.id, updates: lead } })
       emitToast('Task marked as completed', 'success')
     } catch (err) {
       emitToast(err instanceof Error ? err.message : 'Failed to mark task complete')
@@ -321,7 +297,8 @@ export function Dashboard() {
       tint: 'from-teal-500 to-teal-600',
       onClick: () => setShowCallsDoneToday(true),
     },
-    { label: 'Pending Follow-ups', value: dashboard?.pendingFollowUps ?? leadFollowUps.length, icon: Clock, tint: 'from-warning-500 to-warning-600' },
+    { label: 'Pending Follow-ups', value: dashboard?.pendingFollowUps ?? myTasks.length, icon: Clock, tint: 'from-warning-500 to-warning-600' },
+    { label: 'Renewal Reminders', value: dashboard?.renewalReminders ?? renewalRemindersList.length, icon: CalendarClock, tint: 'from-amber-500 to-amber-600', onClick: () => setShowRenewalReminders(true) },
     { label: 'Total Orders', value: dashboard?.totalOrders ?? 0, icon: ShoppingCart, tint: 'from-success-500 to-success-600', onClick: () => navigate('/orders') },
     { label: 'Renewals Due', value: dashboard?.renewalsDue ?? 0, icon: RefreshCw, tint: 'from-danger-500 to-danger-600', onClick: () => navigate('/renewals') },
   ]
@@ -347,147 +324,55 @@ export function Dashboard() {
       />
 
       {/*
-       * Follow-up and renewal reminder tasks for today.
-       * Separated into distinct cards so callers never mix prospective lead calls
-       * with existing customer medicine refills.
+       * A caller's own work for today. Admins see every caller's follow-ups through the same
+       * scoped list, which is a report rather than a to-do list, so this is caller-only.
        */}
-      {(state.currentUser?.role === 'caller' || myLeadTasks.length > 0 || myRenewalTasks.length > 0) && (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Card 1: Lead Follow-ups */}
-          <Card>
-            <div className="p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-warning-100 text-warning-700">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <h2 className="text-base font-semibold text-ink-900">Lead Follow-ups Today</h2>
-                </div>
-                <Badge variant={myLeadTasks.length ? 'warning' : 'success'}>
-                  {myLeadTasks.length ? `${myLeadTasks.length} to do` : 'All clear'}
-                </Badge>
-              </div>
-
-              {myLeadTasks.length === 0 ? (
-                <p className="mt-3 text-sm text-ink-500">No lead follow-ups due today. Overdue calls will appear here too.</p>
-              ) : (
-                <ul className="mt-3 max-h-64 divide-y divide-ink-100 overflow-y-auto pr-1">
-                  {myLeadTasks.map((task) => {
-                    const overdue = task.scheduledDate < istToday()
-                    return (
-                      <li key={task.id} className="flex flex-wrap items-center gap-2 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => task.leadId && navigate(`/leads/${task.leadId}`)}
-                          disabled={!task.leadId}
-                          className="min-w-0 flex-1 text-left text-sm font-medium text-ink-900 hover:text-primary-700 disabled:hover:text-ink-900"
-                        >
-                          <span className="block truncate">{task.customerName}</span>
-                          <span className="text-xs font-normal text-ink-500">
-                            {task.type}
-                            {task.slot && ` · ${task.slot}`}
-                            {overdue ? ` · overdue since ${task.scheduledDate}` : ` · due ${task.scheduledDate}`}
-                          </span>
-                        </button>
-                        {overdue && <Badge variant="danger">Overdue</Badge>}
-                        <Button size="sm" variant="secondary" onClick={() => completeTask(task.id)}>
-                          Done
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
+      {state.currentUser?.role === 'caller' && (
+        <Card>
+          <div className="p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-ink-900">My Tasks Today</h2>
+              <Badge variant={myTasks.length ? 'warning' : 'success'}>
+                {myTasks.length ? `${myTasks.length} to do` : 'All clear'}
+              </Badge>
             </div>
-          </Card>
 
-          {/* Card 2: Renewal Reminders */}
-          <Card>
-            <div className="p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                    <CalendarClock className="h-4 w-4" />
-                  </div>
-                  <h2 className="text-base font-semibold text-ink-900">Renewal Reminders</h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={myRenewalTasks.length ? 'warning' : 'success'}>
-                    {myRenewalTasks.length ? `${myRenewalTasks.length} to do` : 'All clear'}
-                  </Badge>
-                  {renewalRemindersList.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowRenewalReminders(true)}
-                      className="text-xs font-medium text-amber-600 hover:text-amber-700"
-                    >
-                      View all ({renewalRemindersList.length}) →
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {myRenewalTasks.length === 0 ? (
-                <div className="mt-3">
-                  <p className="text-sm text-ink-500">
-                    {renewalRemindersList.length > 0
-                      ? `No reminders due today. You have ${renewalRemindersList.length} upcoming renewal reminder${renewalRemindersList.length === 1 ? '' : 's'} scheduled.`
-                      : 'No renewal reminders scheduled. Reminders can be set directly from the Renewals page.'}
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => navigate('/renewals')}>
-                      Go to Renewals
-                    </Button>
-                    {renewalRemindersList.length > 0 && (
-                      <Button size="sm" variant="secondary" onClick={() => setShowRenewalReminders(true)}>
-                        View upcoming reminders
+            {myTasks.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-500">Nothing due today. Overdue work would appear here too.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-ink-100">
+                {myTasks.map((task) => {
+                  const overdue = task.scheduledDate < istToday()
+                  return (
+                    <li key={task.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => task.leadId && navigate(`/leads/${task.leadId}`)}
+                        disabled={!task.leadId}
+                        className="min-w-0 flex-1 text-left text-sm font-medium text-ink-900 hover:text-primary-700 disabled:hover:text-ink-900"
+                      >
+                        <span className="block truncate">{task.customerName}</span>
+                        <span className="text-xs font-normal text-ink-500">
+                          {task.type}
+                          {task.slot && ` · ${task.slot}`}
+                          {overdue ? ` · overdue since ${task.scheduledDate}` : ` · due ${task.scheduledDate}`}
+                        </span>
+                      </button>
+                      {overdue && <Badge variant="danger">Overdue</Badge>}
+                      <Button size="sm" variant="secondary" onClick={() => completeTask(task.id)}>
+                        Done
                       </Button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <ul className="mt-3 max-h-64 divide-y divide-ink-100 overflow-y-auto pr-1">
-                  {myRenewalTasks.map((task) => {
-                    const overdue = task.scheduledDate < istToday()
-                    const medicine =
-                      task.medicineName || state.renewals.find((r) => r.id === task.renewalId)?.medicineName
-                    return (
-                      <li key={task.id} className="flex flex-wrap items-center gap-2 py-2.5">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium text-ink-900">{task.customerName}</span>
-                            {medicine && (
-                              <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
-                                {medicine}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs font-normal text-ink-500">
-                            {task.slot ? `Slot: ${task.slot}` : 'Reminder'}
-                            {overdue ? ` · overdue since ${formatIndianDate(task.scheduledDate)}` : ` · due ${formatIndianDate(task.scheduledDate)}`}
-                            {task.mobile && (
-                              <a href={`tel:${task.mobile}`} className="ml-1 text-primary-600 hover:underline">
-                                · {task.mobile}
-                              </a>
-                            )}
-                          </span>
-                        </div>
-                        {overdue && <Badge variant="danger">Overdue</Badge>}
-                        <Button size="sm" variant="secondary" onClick={() => navigate('/renewals')}>
-                          Renew →
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          </Card>
-        </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </Card>
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         {statCards.map((card) => {
           const Icon = card.icon
           const base = 'group relative overflow-hidden rounded-2xl border border-ink-200/80 bg-white p-5 shadow-[var(--shadow-card)] transition-all duration-200 hover:shadow-[var(--shadow-card-hover)]'
