@@ -247,18 +247,21 @@ export const serializeRenewal = (r: Renewal) => ({
  * ring, which looks like data missing rather than a query missing.
  */
 export const FOLLOW_UP_CONTACT = {
-  lead: { select: { mobile: true } },
+  lead: { select: { mobile: true, assignedCallerId: true, assignedCaller: { select: { name: true } } } },
   customer: { select: { primaryMobile: true } },
-  renewal: { select: { medicineName: true, renewalDate: true } },
+  renewal: { select: { medicineName: true, renewalDate: true, assignedCallerId: true, assignedCaller: { select: { name: true } } } },
+  assignedCaller: { select: { name: true } },
 } as const;
 
 type FollowUp = {
   id: string; leadId: string | null; renewalId: string | null; customerName: string;
+  assignedCallerId?: string | null;
   scheduledAt: Date; type: string; status: string; notes: string | null; slot: string | null;
   completedAt?: Date | null;
-  lead?: { mobile: string } | null;
+  lead?: { mobile: string; assignedCallerId?: string | null; assignedCaller?: { name: string } | null } | null;
   customer?: { primaryMobile: string } | null;
-  renewal?: { medicineName: string; renewalDate: Date } | null;
+  renewal?: { medicineName: string; renewalDate: Date; assignedCallerId?: string | null; assignedCaller?: { name: string } | null } | null;
+  assignedCaller?: { name: string } | null;
 };
 export const serializeFollowUp = (f: FollowUp) => ({
   id: f.id,
@@ -281,6 +284,8 @@ export const serializeFollowUp = (f: FollowUp) => ({
   type: f.type as FollowUpType,
   status: f.status as FollowUpStatus,
   notes: f.notes ?? undefined,
+  assignedCaller: f.assignedCallerId ?? f.lead?.assignedCallerId ?? f.renewal?.assignedCallerId ?? undefined,
+  callerName: f.assignedCaller?.name ?? f.lead?.assignedCaller?.name ?? f.renewal?.assignedCaller?.name ?? undefined,
 });
 
 type Notification = {

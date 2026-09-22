@@ -165,6 +165,8 @@ export type FollowUp = {
   type: 'call' | 'reminder' | 'callback';
   status: 'pending' | 'completed' | 'missed';
   notes?: string;
+  assignedCaller?: string;
+  callerName?: string;
 };
 
 export type Notification = {

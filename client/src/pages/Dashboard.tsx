@@ -103,6 +103,7 @@ export function Dashboard() {
   const [showCustomers, setShowCustomers] = useState(false)
   const [showRenewalReminders, setShowRenewalReminders] = useState(false)
   const [showCallsDoneToday, setShowCallsDoneToday] = useState(false)
+  const isAdmin = state.currentUser?.role === 'admin'
 
   const dashboard = state.dashboard
 
@@ -742,7 +743,7 @@ export function Dashboard() {
         onClose={() => setShowCallsDoneToday(false)}
         title="Calls Completed Today"
         description={`${completedCallsToday.length} call${completedCallsToday.length === 1 ? '' : 's'} completed today`}
-        size="lg"
+        size={isAdmin ? 'xl' : 'lg'}
       >
         {completedCallsToday.length === 0 ? (
           <p className="py-8 text-center text-sm text-ink-400">
@@ -753,7 +754,7 @@ export function Dashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-ink-100 bg-ink-50/50">
-                  {['Customer', 'Mobile', 'Scheduled', 'Completed'].map((h, i) => (
+                  {['Customer', 'Mobile', ...(isAdmin ? ['Caller'] : []), 'Scheduled', 'Completed'].map((h, i) => (
                     <th
                       key={h}
                       className={`whitespace-nowrap py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-ink-400 ${
@@ -773,6 +774,13 @@ export function Dashboard() {
                     : c.completedDate
                     ? formatIndianDate(c.completedDate)
                     : formatIndianDate(c.scheduledDate)
+
+                  const callerName =
+                    c.callerName ||
+                    getUserName(c.assignedCaller) ||
+                    (c.leadId ? getUserName(state.leads.find((l) => l.id === c.leadId)?.assignedCaller) : undefined) ||
+                    (c.renewalId ? getUserName(state.renewals.find((r) => r.id === c.renewalId)?.assignedCaller) : undefined) ||
+                    '—'
 
                   return (
                     <tr key={c.id} className="border-b border-ink-50 last:border-0 hover:bg-ink-50/30">
@@ -806,6 +814,14 @@ export function Dashboard() {
                           '—'
                         )}
                       </td>
+                      {isAdmin && (
+                        <td className="whitespace-nowrap px-3 py-3 text-ink-700">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-100/80 px-2.5 py-0.5 text-xs font-medium text-ink-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
+                            {callerName}
+                          </span>
+                        </td>
+                      )}
                       <td className="whitespace-nowrap px-3 py-3 text-ink-600">
                         {formatIndianDate(c.scheduledDate)}
                         {c.slot && <span className="ml-1 text-xs text-ink-400">({c.slot})</span>}
