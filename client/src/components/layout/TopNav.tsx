@@ -40,7 +40,8 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
   const profileRef = useRef<HTMLDivElement>(null)
 
   const { greeting, day } = getGreeting()
-  const firstName = currentUser?.name?.trim().split(' ')[0] ?? 'there'
+  const rawName = currentUser?.name?.trim().split(' ')[0] ?? 'there'
+  const firstName = rawName.charAt(0).toUpperCase() + rawName.slice(1)
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -59,6 +60,7 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-ink-200/80 bg-white/85 px-4 backdrop-blur-lg sm:px-6">
+      {/* Left section: mobile hamburger/title + desktop greeting */}
       <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}
@@ -68,21 +70,24 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
           <Menu className="h-5 w-5" />
         </button>
 
-        <h1 className="text-lg font-semibold text-ink-900 lg:hidden">{title}</h1>
-      </div>
+        <h1 className="text-lg font-semibold text-ink-900 md:hidden">{title}</h1>
 
-      {/* Personalized Greeting Banner */}
-      <div className="hidden flex-1 items-center justify-center px-4 md:flex">
-        <div className="inline-flex items-center gap-2 rounded-full border border-ink-200/80 bg-gradient-to-r from-ink-50/80 via-white to-ink-50/80 px-4 py-1.5 text-xs sm:text-sm font-medium text-ink-700 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
-          <span className="text-sm select-none">👋</span>
-          <span className="font-semibold text-ink-900">{greeting}, {firstName}!</span>
-          <span className="text-ink-300">•</span>
-          <span className="text-ink-600">Wishing you a productive {day}</span>
+        {/* Personalized Greeting (Shifted left, themed, clean typography without card) */}
+        <div className="hidden items-center gap-2.5 md:flex">
+          <span className="text-base select-none leading-none">👋</span>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium text-ink-700">
+              {greeting},{' '}
+              <span className="font-semibold text-ink-900">{firstName}</span>!
+            </span>
+            <span className="select-none text-ink-300">•</span>
+            <span className="text-ink-500">Wishing you a productive {day}</span>
+          </div>
         </div>
       </div>
 
+      {/* Right section: profile menu */}
       <div className="flex items-center gap-1.5">
-        {/* Profile menu */}
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setShowProfileMenu((p) => !p)}
@@ -114,7 +119,6 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
           )}
         </div>
       </div>
-
     </header>
   )
 }
