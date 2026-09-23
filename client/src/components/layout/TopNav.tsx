@@ -73,16 +73,13 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
         <h1 className="text-lg font-semibold text-ink-900 md:hidden">{title}</h1>
 
         {/* Personalized Greeting (Shifted left, themed, clean typography without card) */}
-        <div className="hidden items-center gap-2.5 md:flex">
-          <span className="text-base select-none leading-none">👋</span>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-medium text-ink-700">
-              {greeting},{' '}
-              <span className="font-semibold text-ink-900">{firstName}</span>!
-            </span>
-            <span className="select-none text-ink-300">•</span>
-            <span className="text-ink-500">Wishing you a productive {day}</span>
-          </div>
+        <div className="hidden items-center gap-2 text-sm md:flex">
+          <span className="font-medium text-ink-700">
+            {greeting},{' '}
+            <span className="font-semibold text-ink-900">{firstName}</span>!
+          </span>
+          <span className="select-none text-ink-300">•</span>
+          <span className="text-ink-500">Wishing you a productive {day}</span>
         </div>
       </div>
 
