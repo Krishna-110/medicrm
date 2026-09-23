@@ -13,6 +13,24 @@ function getInitials(name: string): string {
   return name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function getGreeting(date = new Date()): { greeting: string; day: string } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    hourCycle: 'h23',
+    weekday: 'long',
+  }).formatToParts(date)
+
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 12)
+  const day = parts.find((p) => p.type === 'weekday')?.value ?? 'Today'
+
+  let greeting = 'Good Evening'
+  if (hour < 12) greeting = 'Good Morning'
+  else if (hour < 17) greeting = 'Good Afternoon'
+
+  return { greeting, day }
+}
+
 export function TopNav({ title, onMenuClick }: TopNavProps) {
   const { state, dispatch } = useApp()
   const navigate = useNavigate()
@@ -20,6 +38,9 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
 
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
+
+  const { greeting, day } = getGreeting()
+  const firstName = currentUser?.name?.trim().split(' ')[0] ?? 'there'
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -36,21 +57,31 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
     navigate('/login')
   }
 
-
-
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-ink-200/80 bg-white/85 px-4 backdrop-blur-lg sm:px-6">
-      <button
-        onClick={onMenuClick}
-        className="rounded-lg p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-700 lg:hidden"
-        aria-label="Open menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-ink-200/80 bg-white/85 px-4 backdrop-blur-lg sm:px-6">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          className="rounded-lg p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-700 lg:hidden"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
 
-      <h1 className="text-lg font-semibold text-ink-900 lg:hidden">{title}</h1>
+        <h1 className="text-lg font-semibold text-ink-900 lg:hidden">{title}</h1>
+      </div>
 
-      <div className="ml-auto flex items-center gap-1.5">
+      {/* Personalized Greeting Banner */}
+      <div className="hidden flex-1 items-center justify-center px-4 md:flex">
+        <div className="inline-flex items-center gap-2 rounded-full border border-ink-200/80 bg-gradient-to-r from-ink-50/80 via-white to-ink-50/80 px-4 py-1.5 text-xs sm:text-sm font-medium text-ink-700 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+          <span className="text-sm select-none">👋</span>
+          <span className="font-semibold text-ink-900">{greeting}, {firstName}!</span>
+          <span className="text-ink-300">•</span>
+          <span className="text-ink-600">Wishing you a productive {day}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5">
         {/* Profile menu */}
         <div className="relative" ref={profileRef}>
           <button
