@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, Menu, LogOut, ChevronDown } from 'lucide-react'
+import { Menu, LogOut, ChevronDown } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
 import { logout } from '@/context/AppContext'
-import { notificationsApi } from '@/api/notifications'
-import { emitToast } from '@/lib/toast'
 
 type TopNavProps = {
   title: string
@@ -15,42 +13,16 @@ function getInitials(name: string): string {
   return name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function formatTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return 'Just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
-const notifDot: Record<string, string> = {
-  info: 'bg-primary-500',
-  warning: 'bg-warning-500',
-  success: 'bg-success-500',
-  error: 'bg-danger-500',
-}
-
 export function TopNav({ title, onMenuClick }: TopNavProps) {
   const { state, dispatch } = useApp()
   const navigate = useNavigate()
-  const { currentUser, notifications } = state
+  const { currentUser } = state
 
-  const [showNotifications, setShowNotifications] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
-
-  const notificationRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
-
-  const unreadCount = notifications.filter((n) => !n.read).length
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (notificationRef.current && !notificationRef.current.contains(e.target as Node)) {
-        setShowNotifications(false)
-      }
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setShowProfileMenu(false)
       }
@@ -59,20 +31,9 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-
-
   async function handleLogout() {
     await logout(dispatch)
     navigate('/login')
-  }
-
-  async function handleMarkRead(id: string) {
-    try {
-      await notificationsApi.markRead(id)
-      dispatch({ type: 'MARK_NOTIFICATION_READ', payload: { id } })
-    } catch (err) {
-      emitToast(err instanceof Error ? err.message : 'Failed to mark notification read')
-    }
   }
 
 
@@ -89,91 +50,11 @@ export function TopNav({ title, onMenuClick }: TopNavProps) {
 
       <h1 className="text-lg font-semibold text-ink-900 lg:hidden">{title}</h1>
 
-      {/* Global search */}
-      <div className="mx-1 hidden max-w-md flex-1 md:block">
-        <div className="group relative">
-          <Search className="absolute left-3.5 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-ink-400 transition-colors group-focus-within:text-primary-500" />
-          <input
-            type="text"
-            aria-label="Search leads, orders and customers"
-            placeholder="Search leads, orders, customers..."
-            value={state.searchQuery}
-            onChange={(e) => dispatch({ type: 'SET_SEARCH_QUERY', payload: { query: e.target.value } })}
-            className="w-full rounded-xl border border-transparent bg-ink-100/80 py-2.5 pl-10 pr-16 text-sm text-ink-800 placeholder-ink-400 outline-none transition-all focus:border-primary-300 focus:bg-white focus:ring-[3px] focus:ring-primary-500/15"
-          />
-          <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md border border-ink-200 bg-white px-1.5 py-0.5 font-mono text-[10px] font-medium text-ink-400 lg:flex">
-            ⌘K
-          </kbd>
-        </div>
-      </div>
-
       <div className="ml-auto flex items-center gap-1.5">
-        {/* Notifications */}
-        <div className="relative" ref={notificationRef}>
-          <button
-            onClick={() => {
-              setShowNotifications((p) => !p)
-              setShowProfileMenu(false)
-            }}
-            className="relative rounded-lg p-2 text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-700"
-            aria-label="Notifications"
-          >
-            <Bell className="h-[19px] w-[19px]" />
-            {unreadCount > 0 && (
-              <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-danger-500 ring-2 ring-white" />
-              </span>
-            )}
-          </button>
-
-          {showNotifications && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-[340px] origin-top-right animate-pop-in overflow-hidden rounded-2xl border border-ink-200/80 bg-white shadow-[var(--shadow-pop)]">
-              <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
-                <h3 className="text-sm font-semibold text-ink-900">Notifications</h3>
-                {unreadCount > 0 && (
-                  <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700">
-                    {unreadCount} new
-                  </span>
-                )}
-              </div>
-              <div className="max-h-[360px] overflow-y-auto">
-                {notifications.length === 0 ? (
-                  <p className="px-4 py-8 text-center text-sm text-ink-400">No notifications</p>
-                ) : (
-                  notifications.slice(0, 10).map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => handleMarkRead(n.id)}
-                      className={`flex w-full gap-3 border-b border-ink-50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-ink-50/70 ${
-                        !n.read ? 'bg-primary-50/40' : ''
-                      }`}
-                    >
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notifDot[n.type] ?? 'bg-ink-400'}`} />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium text-ink-800">{n.title}</span>
-                          <span className="shrink-0 text-[11px] text-ink-400">{formatTimeAgo(n.createdAt)}</span>
-                        </span>
-                        <span className="mt-0.5 block text-xs leading-relaxed text-ink-500">{n.message}</span>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="mx-1 h-6 w-px bg-ink-200" />
-
         {/* Profile menu */}
         <div className="relative" ref={profileRef}>
           <button
-            onClick={() => {
-              setShowProfileMenu((p) => !p)
-              setShowNotifications(false)
-            }}
+            onClick={() => setShowProfileMenu((p) => !p)}
             className="flex items-center gap-2 rounded-xl py-1.5 pl-1.5 pr-2 transition-colors hover:bg-ink-100"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-[13px] font-semibold text-white">
