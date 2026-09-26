@@ -247,7 +247,7 @@ export function Orders() {
         const base64 = reader.result as string
         const updated = await ordersApi.update(order.id, { paymentScreenshot: base64 })
         dispatch({ type: 'UPDATE_ORDER', payload: { id: updated.id, updates: updated } })
-        if (updated.leadId) {
+        if (updated.leadId && !isReorder(order)) {
           dispatch({
             type: 'UPDATE_LEAD',
             payload: { id: updated.leadId, updates: { paymentScreenshot: updated.paymentScreenshot } },
@@ -270,7 +270,7 @@ export function Orders() {
     try {
       const updated = await ordersApi.update(order.id, { paymentScreenshot: '' })
       dispatch({ type: 'UPDATE_ORDER', payload: { id: updated.id, updates: updated } })
-      if (updated.leadId) {
+      if (updated.leadId && !isReorder(order)) {
         dispatch({
           type: 'UPDATE_LEAD',
           payload: { id: updated.leadId, updates: { paymentScreenshot: undefined } },

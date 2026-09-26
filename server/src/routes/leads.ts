@@ -271,10 +271,17 @@ leadsRouter.patch(
       const updated = await tx.lead.update({ where: { id: before.id }, data });
 
       if ('paymentScreenshot' in body) {
-        await tx.order.updateMany({
+        // Sync proof only to the original conversion order, never overwrite repeat renewal orders
+        const conversionOrder = await tx.order.findFirst({
           where: { leadId: updated.id },
-          data: { paymentScreenshot: (data.paymentScreenshot as string | null) ?? null },
+          orderBy: { createdAt: 'asc' },
         });
+        if (conversionOrder) {
+          await tx.order.update({
+            where: { id: conversionOrder.id },
+            data: { paymentScreenshot: (data.paymentScreenshot as string | null) ?? null },
+          });
+        }
       }
 
       if ('assignedCaller' in body && before.assignedCallerId !== updated.assignedCallerId) {

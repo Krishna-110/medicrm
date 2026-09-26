@@ -167,11 +167,13 @@ export function LeadDetailPage() {
         const base64 = reader.result as string
         const updated = await leadsApi.update(lead.id, { paymentScreenshot: base64 })
         dispatch({ type: 'UPDATE_LEAD', payload: { id: updated.id, updates: updated } })
-        const relatedOrder = state.orders.find((o) => o.leadId === updated.id)
-        if (relatedOrder) {
+        const conversionOrder = [...state.orders]
+          .filter((o) => o.leadId === updated.id)
+          .sort((a, b) => new Date(a.createdDate).getTime() - new Date(b.createdDate).getTime())[0]
+        if (conversionOrder) {
           dispatch({
             type: 'UPDATE_ORDER',
-            payload: { id: relatedOrder.id, updates: { paymentScreenshot: updated.paymentScreenshot } },
+            payload: { id: conversionOrder.id, updates: { paymentScreenshot: updated.paymentScreenshot } },
           })
         }
         emitToast('Payment proof uploaded successfully', 'success')
@@ -191,11 +193,13 @@ export function LeadDetailPage() {
     try {
       const updated = await leadsApi.update(lead.id, { paymentScreenshot: '' })
       dispatch({ type: 'UPDATE_LEAD', payload: { id: updated.id, updates: updated } })
-      const relatedOrder = state.orders.find((o) => o.leadId === updated.id)
-      if (relatedOrder) {
+      const conversionOrder = [...state.orders]
+        .filter((o) => o.leadId === updated.id)
+        .sort((a, b) => new Date(a.createdDate).getTime() - new Date(b.createdDate).getTime())[0]
+      if (conversionOrder) {
         dispatch({
           type: 'UPDATE_ORDER',
-          payload: { id: relatedOrder.id, updates: { paymentScreenshot: undefined } },
+          payload: { id: conversionOrder.id, updates: { paymentScreenshot: undefined } },
         })
       }
       emitToast('Payment proof removed', 'success')

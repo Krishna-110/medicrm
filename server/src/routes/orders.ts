@@ -56,10 +56,23 @@ ordersRouter.patch(
     const order = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({ where: { id }, data });
       if (before.leadId && 'paymentScreenshot' in data) {
-        await tx.lead.update({
-          where: { id: before.leadId },
-          data: { paymentScreenshot: data.paymentScreenshot as string | null },
+        // Only sync back to the lead if this order is the customer's initial conversion order, not a renewal reorder
+        const isReorder = await tx.order.findFirst({
+          where: {
+            customerId: before.customerId,
+            id: { not: before.id },
+            OR: [
+              { createdAt: { lt: before.createdAt } },
+              { createdAt: before.createdAt, orderNumber: { lt: before.orderNumber } },
+            ],
+          },
         });
+        if (!isReorder) {
+          await tx.lead.update({
+            where: { id: before.leadId },
+            data: { paymentScreenshot: data.paymentScreenshot as string | null },
+          });
+        }
       }
       // A discount change moves the payable amount, so the totals are rebuilt rather than
       // patched — the same recomputation any line-item change triggers.
