@@ -187,7 +187,14 @@ export function ConvertLeadModal({
                   </div>
                   <SearchableSelect
                     value={line.name}
-                    onChange={name => setLine(line.id, { name })}
+                    onChange={name => {
+                      const trimmed = name.trim()
+                      setLine(line.id, {
+                        name,
+                        ...(trimmed && (!line.quantity || line.quantity === '0') ? { quantity: '1' } : {}),
+                        ...(!trimmed ? { quantity: '' } : {}),
+                      })
+                    }}
                     options={medicineOptions}
                     placeholder="Search medicines..."
                     ariaLabel={`Medicine ${idx + 1}`}
@@ -204,15 +211,18 @@ export function ConvertLeadModal({
                     >
                       Quantity
                     </label>
-                    <div className="inline-flex items-center rounded-xl border border-ink-200/90 bg-white shadow-sm">
+                    <div className={`inline-flex items-center rounded-xl border border-ink-200/90 bg-white shadow-sm transition-all ${
+                      !line.name.trim() ? 'opacity-40 cursor-not-allowed bg-ink-100/60' : ''
+                    }`}>
                       <button
                         type="button"
                         onClick={() => {
+                          if (!line.name.trim()) return
                           const current = parseInt(line.quantity || '0', 10)
                           const next = Math.max(0, current - 1)
                           setLine(line.id, { quantity: next > 0 ? String(next) : '' })
                         }}
-                        disabled={!line.quantity || line.quantity === '0'}
+                        disabled={!line.name.trim() || !line.quantity || line.quantity === '0'}
                         aria-label={`Decrease quantity for medicine ${idx + 1}`}
                         className="flex h-9 w-9 items-center justify-center rounded-l-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 active:bg-ink-200 disabled:opacity-30 disabled:pointer-events-none"
                       >
@@ -224,7 +234,9 @@ export function ConvertLeadModal({
                         min={0}
                         placeholder="0"
                         value={line.quantity}
+                        disabled={!line.name.trim()}
                         onChange={e => {
+                          if (!line.name.trim()) return
                           const val = e.target.value
                           if (val === '' || /^\d+$/.test(val)) {
                             setLine(line.id, { quantity: val })
@@ -232,17 +244,19 @@ export function ConvertLeadModal({
                         }}
                         onFocus={e => e.target.select()}
                         aria-label={`Quantity for medicine ${idx + 1}`}
-                        className="h-9 w-14 border-x border-ink-100 bg-transparent text-center text-sm font-semibold text-ink-900 placeholder:text-ink-300 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="h-9 w-14 border-x border-ink-100 bg-transparent text-center text-sm font-semibold text-ink-900 placeholder:text-ink-300 focus:outline-none disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <button
                         type="button"
                         onClick={() => {
+                          if (!line.name.trim()) return
                           const current = parseInt(line.quantity || '0', 10)
                           const next = current + 1
                           setLine(line.id, { quantity: String(next) })
                         }}
+                        disabled={!line.name.trim()}
                         aria-label={`Increase quantity for medicine ${idx + 1}`}
-                        className="flex h-9 w-9 items-center justify-center rounded-r-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 active:bg-ink-200"
+                        className="flex h-9 w-9 items-center justify-center rounded-r-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 active:bg-ink-200 disabled:opacity-30 disabled:pointer-events-none"
                       >
                         <Plus size={14} />
                       </button>
