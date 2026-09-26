@@ -186,7 +186,7 @@ export function RenewOrderModal({
                       setRow(line.id, {
                         name,
                         ...(trimmed && line.quantity <= 0 ? { quantity: '1' } : {}),
-                        ...(!trimmed ? { quantity: '' } : {}),
+                        ...(!trimmed ? { quantity: '1' } : {}),
                       })
                     }}
                     options={medicineOptions}
@@ -196,7 +196,7 @@ export function RenewOrderModal({
                   />
                 </div>
 
-                {/* 2. Quantity (with - and + buttons, placeholder 0) & Line Total */}
+                {/* 2. Quantity (with - and + buttons, default 1) & Line Total */}
                 <div className="mt-3 flex items-end justify-between gap-4">
                   <div>
                     <label
@@ -212,11 +212,11 @@ export function RenewOrderModal({
                         type="button"
                         onClick={() => {
                           if (!line.name.trim()) return
-                          const current = line.quantity
-                          const next = Math.max(0, current - 1)
-                          setRow(line.id, { quantity: next > 0 ? String(next) : '' })
+                          const current = line.quantity || 1
+                          const next = Math.max(1, current - 1)
+                          setRow(line.id, { quantity: String(next) })
                         }}
-                        disabled={!line.name.trim() || line.quantity <= 0}
+                        disabled={!line.name.trim() || line.quantity <= 1}
                         aria-label={`Decrease quantity for medicine ${idx + 1}`}
                         className="flex h-9 w-9 items-center justify-center rounded-l-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 active:bg-ink-200 disabled:opacity-30 disabled:pointer-events-none"
                       >
@@ -225,9 +225,9 @@ export function RenewOrderModal({
                       <input
                         id={`qty-${line.id}`}
                         type="number"
-                        min={0}
-                        placeholder="0"
-                        value={line.quantity > 0 ? line.quantity : ''}
+                        min={1}
+                        placeholder="1"
+                        value={line.quantity > 0 ? line.quantity : '1'}
                         disabled={!line.name.trim()}
                         onChange={e => {
                           if (!line.name.trim()) return
@@ -244,7 +244,7 @@ export function RenewOrderModal({
                         type="button"
                         onClick={() => {
                           if (!line.name.trim()) return
-                          const current = line.quantity
+                          const current = line.quantity || 1
                           const next = current + 1
                           setRow(line.id, { quantity: String(next) })
                         }}
@@ -308,7 +308,7 @@ export function RenewOrderModal({
           </div>
           <button
             type="button"
-            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', days: '30', quantity: '' }])}
+            onClick={() => setRows(rs => [...rs, { id: crypto.randomUUID(), name: '', days: '30', quantity: '1' }])}
             className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
           >
             <Plus size={15} /> Add another medicine

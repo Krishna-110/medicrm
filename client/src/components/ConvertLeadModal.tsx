@@ -20,7 +20,7 @@ const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDi
 type SaleLine = { id: string; name: string; days: number; quantity: string }
 
 let lineSeq = 0
-const emptyLine = (): SaleLine => ({ id: `sale-${++lineSeq}`, name: '', days: DEFAULT_TENURE, quantity: '' })
+const emptyLine = (): SaleLine => ({ id: `sale-${++lineSeq}`, name: '', days: DEFAULT_TENURE, quantity: '1' })
 
 /**
  * Composing a sale: which medicines, tenure (for renewal), quantity (for price and stock), and proof of payment.
@@ -192,7 +192,7 @@ export function ConvertLeadModal({
                       setLine(line.id, {
                         name,
                         ...(trimmed && (!line.quantity || line.quantity === '0') ? { quantity: '1' } : {}),
-                        ...(!trimmed ? { quantity: '' } : {}),
+                        ...(!trimmed ? { quantity: '1' } : {}),
                       })
                     }}
                     options={medicineOptions}
@@ -202,7 +202,7 @@ export function ConvertLeadModal({
                   />
                 </div>
 
-                {/* 2. Quantity (with - and + buttons, placeholder 0) & Line Total */}
+                {/* 2. Quantity (with - and + buttons, default 1) & Line Total */}
                 <div className="mt-3 flex items-end justify-between gap-4">
                   <div>
                     <label
@@ -218,11 +218,11 @@ export function ConvertLeadModal({
                         type="button"
                         onClick={() => {
                           if (!line.name.trim()) return
-                          const current = parseInt(line.quantity || '0', 10)
-                          const next = Math.max(0, current - 1)
-                          setLine(line.id, { quantity: next > 0 ? String(next) : '' })
+                          const current = parseInt(line.quantity || '1', 10)
+                          const next = Math.max(1, current - 1)
+                          setLine(line.id, { quantity: String(next) })
                         }}
-                        disabled={!line.name.trim() || !line.quantity || line.quantity === '0'}
+                        disabled={!line.name.trim() || parseInt(line.quantity || '1', 10) <= 1}
                         aria-label={`Decrease quantity for medicine ${idx + 1}`}
                         className="flex h-9 w-9 items-center justify-center rounded-l-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 active:bg-ink-200 disabled:opacity-30 disabled:pointer-events-none"
                       >
@@ -231,8 +231,8 @@ export function ConvertLeadModal({
                       <input
                         id={`${id}-quantity-${line.id}`}
                         type="number"
-                        min={0}
-                        placeholder="0"
+                        min={1}
+                        placeholder="1"
                         value={line.quantity}
                         disabled={!line.name.trim()}
                         onChange={e => {
@@ -250,7 +250,7 @@ export function ConvertLeadModal({
                         type="button"
                         onClick={() => {
                           if (!line.name.trim()) return
-                          const current = parseInt(line.quantity || '0', 10)
+                          const current = parseInt(line.quantity || '1', 10)
                           const next = current + 1
                           setLine(line.id, { quantity: String(next) })
                         }}
