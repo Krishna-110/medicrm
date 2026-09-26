@@ -65,7 +65,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
    * on a page with fresh data re-renders these without anything else being wired up.
    */
   const badgeCounts = {
-    leads: state.leads.filter((l) => ['new', 'follow_up_pending'].includes(l.status)).length,
+    leads: state.leads.filter((l) => l.status !== 'converted').length,
     orders: state.orders.filter((o) => o.stage !== 'delivered').length,
     renewals: state.renewals.filter((r) => r.status === 'due_today' || r.status === 'overdue').length,
   }
