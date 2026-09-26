@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, Upload } from 'lucide-react'
+import { Minus, Plus, Trash2, Upload } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
 import { renewalsApi } from '@/api/renewals'
 import { emitToast } from '@/lib/toast'
@@ -160,116 +160,146 @@ export function RenewOrderModal({
             {lines.map((line, idx) => (
               <div
                 key={line.id}
-                className="rounded-xl border border-ink-200/80 bg-ink-50/40 p-3 sm:border-0 sm:bg-transparent sm:p-0 sm:flex sm:items-end sm:gap-2"
+                className="rounded-xl border border-ink-200/80 bg-ink-50/40 p-3 sm:p-3.5"
               >
-                {/*
-                 * Medicine and Days both carry a label so their inputs sit on the same line —
-                 * without one, the labelled Days box dropped below the label-less picker. The
-                 * row bottom-aligns, so the price and remove control line up with the inputs.
-                 *
-                 * Days, not quantity: a reorder is sold by supply duration, the same model as a
-                 * lead. The price is the medicine's, once, regardless of days.
-                 */}
-                <div className="w-full min-w-0 sm:flex-1">
-                  <div className="flex items-center justify-between mb-1 sm:mb-0.5">
-                    <label className="block text-[10px] font-medium uppercase tracking-wide text-ink-400">
+                {/* 1. Medicine Name + Trash */}
+                <div className="w-full min-w-0">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="block text-[10px] font-medium uppercase tracking-wide text-ink-400">
                       Medicine {rows.length > 1 ? `#${idx + 1}` : ''}
-                    </label>
+                    </span>
                     <button
                       type="button"
                       onClick={() => setRows(rs => rs.filter(r => r.id !== line.id))}
                       disabled={rows.length === 1}
                       title="Remove line"
                       aria-label={`Remove medicine ${idx + 1}`}
-                      className="sm:hidden -mr-1 p-1 text-ink-400 transition-colors hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30"
+                      className="-mr-1 rounded-lg p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30"
                     >
                       <Trash2 size={15} />
                     </button>
                   </div>
                   <SearchableSelect
                     value={line.name}
-                    onChange={name => setRow(line.id, { name })}
+                    onChange={name => {
+                      const trimmed = name.trim()
+                      setRow(line.id, {
+                        name,
+                        ...(trimmed && line.quantity <= 0 ? { quantity: '1' } : {}),
+                        ...(!trimmed ? { quantity: '' } : {}),
+                      })
+                    }}
                     options={medicineOptions}
                     placeholder="Search medicines..."
                     ariaLabel={`Medicine ${idx + 1}`}
                     emptyText="No medicines found"
                   />
                 </div>
-                {/*
-                 * Each trailing column carries a label — a real one for Days, an invisible
-                 * spacer for the price and the remove button — so every control starts on the
-                 * same line under an equal-height label. The price and remove button reuse the
-                 * field-input box (transparent) so their height matches the input at every
-                 * breakpoint; the input is taller on phones, which a fixed padding could not
-                 * have tracked.
-                 */}
-                <div className="mt-2.5 flex w-full items-end gap-2.5 sm:mt-0 sm:w-auto sm:items-stretch sm:gap-2">
-                  <div className="flex-[3] sm:w-28 sm:flex-none sm:grow-0">
-                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:mb-0.5" htmlFor={`tenure-${line.id}`}>
-                      Tenure
-                    </label>
-                    {/* The same bundles the conversion dialog sells, so a reorder cannot run
-                        for a period the business does not offer. A cycle carried over from an
-                        older free-typed value stays selectable until it is changed. */}
-                    <select
-                      id={`tenure-${line.id}`}
-                      value={line.days}
-                      onChange={e => setRow(line.id, { days: e.target.value })}
-                      aria-label={`Tenure for medicine ${idx + 1}`}
-                      className="field-input font-medium px-2.5 sm:px-3"
+
+                {/* 2. Quantity (with - and + buttons, placeholder 0) & Line Total */}
+                <div className="mt-3 flex items-end justify-between gap-4">
+                  <div>
+                    <label
+                      className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400"
+                      htmlFor={`qty-${line.id}`}
                     >
-                      {!TENURES.some(t => t === line.days) && (
-                        <option value={line.days}>{line.days} days</option>
-                      )}
-                      {TENURES.map(t => <option key={t} value={String(t)}>{t} days</option>)}
-                    </select>
-                  </div>
-                  <div className="flex-[2] sm:w-20 sm:flex-none sm:grow-0">
-                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:mb-0.5" htmlFor={`qty-${line.id}`}>
                       Quantity
                     </label>
-                    <input
-                      id={`qty-${line.id}`}
-                      type="number"
-                      min={1}
-                      placeholder="1"
-                      value={line.quantity}
-                      onChange={e => setRow(line.id, { quantity: e.target.value })}
-                      onFocus={e => e.target.select()}
-                      aria-label={`Quantity for medicine ${idx + 1}`}
-                      className="field-input text-center placeholder:text-ink-300 font-medium px-2"
-                    />
+                    <div className={`inline-flex items-center rounded-xl border border-ink-200/90 bg-white shadow-sm transition-all ${
+                      !line.name.trim() ? 'opacity-40 cursor-not-allowed bg-ink-100/60' : ''
+                    }`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!line.name.trim()) return
+                          const current = line.quantity
+                          const next = Math.max(0, current - 1)
+                          setRow(line.id, { quantity: next > 0 ? String(next) : '' })
+                        }}
+                        disabled={!line.name.trim() || line.quantity <= 0}
+                        aria-label={`Decrease quantity for medicine ${idx + 1}`}
+                        className="flex h-9 w-9 items-center justify-center rounded-l-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 active:bg-ink-200 disabled:opacity-30 disabled:pointer-events-none"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <input
+                        id={`qty-${line.id}`}
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        value={line.quantity > 0 ? line.quantity : ''}
+                        disabled={!line.name.trim()}
+                        onChange={e => {
+                          if (!line.name.trim()) return
+                          const val = e.target.value
+                          if (val === '' || /^\d+$/.test(val)) {
+                            setRow(line.id, { quantity: val })
+                          }
+                        }}
+                        onFocus={e => e.target.select()}
+                        aria-label={`Quantity for medicine ${idx + 1}`}
+                        className="h-9 w-14 border-x border-ink-100 bg-transparent text-center text-sm font-semibold text-ink-900 placeholder:text-ink-300 focus:outline-none disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!line.name.trim()) return
+                          const current = line.quantity
+                          const next = current + 1
+                          setRow(line.id, { quantity: String(next) })
+                        }}
+                        disabled={!line.name.trim()}
+                        aria-label={`Increase quantity for medicine ${idx + 1}`}
+                        className="flex h-9 w-9 items-center justify-center rounded-r-xl text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900 active:bg-ink-200 disabled:opacity-30 disabled:pointer-events-none"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex-[3] flex flex-col justify-end text-right sm:w-24 sm:flex-none">
-                    <span className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400 sm:invisible sm:mb-0.5 sm:text-transparent">
+
+                  <div className="text-right">
+                    <span className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400">
                       Total
                     </span>
-                    <div className="field-input flex items-center justify-end border-transparent bg-transparent px-1 font-semibold text-ink-900 text-sm sm:text-base tabular-nums">
+                    <div className="flex h-9 items-center justify-end font-semibold text-ink-900 text-sm sm:text-base tabular-nums">
                       {money(line.amount)}
                     </div>
                   </div>
-                  <div className="hidden sm:flex sm:flex-col">
-                    <span aria-hidden className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-transparent">·</span>
-                    <button
-                      type="button"
-                      onClick={() => setRows(rs => rs.filter(r => r.id !== line.id))}
-                      disabled={rows.length === 1}
-                      title="Remove line"
-                      aria-label={`Remove medicine ${idx + 1}`}
-                      className="flex flex-1 items-center justify-center rounded-lg px-2.5 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:pointer-events-none disabled:opacity-30"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
                 </div>
+
+                {/* 3. Tenure placed below so everything fits properly */}
+                <div className="mt-3">
+                  <label
+                    className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-ink-400"
+                    htmlFor={`tenure-${line.id}`}
+                  >
+                    Tenure
+                  </label>
+                  <select
+                    id={`tenure-${line.id}`}
+                    value={line.days}
+                    onChange={e => setRow(line.id, { days: e.target.value })}
+                    aria-label={`Tenure for medicine ${idx + 1}`}
+                    className="field-input font-medium w-full sm:w-44 px-3"
+                  >
+                    {!TENURES.some(t => String(t) === String(line.days)) && (
+                      <option value={line.days}>{line.days} days</option>
+                    )}
+                    {TENURES.map(t => (
+                      <option key={t} value={String(t)}>
+                        {t} days
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {line.name.trim() && line.unitPrice === 0 && (
-                  // Says why rather than showing a free medicine and leaving the user to wonder.
-                  <p className="w-full text-xs text-warning-700">
+                  <p className="mt-2 text-xs text-warning-700">
                     {line.name} is not in the catalogue, so it has no price.
                   </p>
                 )}
                 {line.short && (
-                  <p className="w-full text-xs font-medium text-danger-600">
+                  <p className="mt-2 text-xs font-medium text-danger-600">
                     Only {line.stock} of {line.name} in stock, {line.quantity} needed.
                   </p>
                 )}
